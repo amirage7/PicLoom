@@ -62,6 +62,8 @@ interface AppState {
   isRightPanelOpen: boolean
   selectProject: (projectId: string) => void
   toggleLeftPanel: () => void
+  setLeftPanelOpen: (value: boolean) => void
+  setRightPanelOpen: (value: boolean) => void
   saveStatus: SaveStatus
   error: string | null
   hydrateResources: () => Promise<void>
@@ -84,6 +86,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   isRightPanelOpen: true,
   selectProject: (activeProjectId) => set({ activeProjectId }),
   toggleLeftPanel: () => set((state) => ({ isLeftPanelOpen: !state.isLeftPanelOpen })),
+  setLeftPanelOpen: (isLeftPanelOpen) => set({ isLeftPanelOpen }),
+  setRightPanelOpen: (isRightPanelOpen) => set({ isRightPanelOpen }),
   toggleRightPanel: () => set((state) => ({ isRightPanelOpen: !state.isRightPanelOpen })),
   saveStatus: 'idle',
   error: null,
