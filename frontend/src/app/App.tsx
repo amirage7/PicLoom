@@ -5,14 +5,15 @@ import { IconButton } from '../components/IconButton'
 import { CanvasBoard } from '../features/canvas/CanvasBoard'
 import { releaseAllObjectUrls } from '../features/canvas/store/canvasStore'
 import { ImageInspector } from '../features/inspector/ImageInspector'
-import { ProjectList } from '../features/projects/ProjectList'
-import { PromptLibrary } from '../features/prompts/PromptLibrary'
+import { ProjectList } from '../features/projects/ProjectListPersisted'
+import { PromptLibrary } from '../features/prompts/PromptLibraryPersisted'
 import { useBackendHealth } from '../lib/useBackendHealth'
 import { useAppStore } from './store'
 
 
 export default function App() {
   const isLeftPanelOpen = useAppStore((state) => state.isLeftPanelOpen)
+  const hydrateResources = useAppStore((state) => state.hydrateResources)
   useEffect(() => {
     const releaseUploads = () => releaseAllObjectUrls()
     window.addEventListener('pagehide', releaseUploads)
@@ -21,6 +22,10 @@ export default function App() {
 
   const isRightPanelOpen = useAppStore((state) => state.isRightPanelOpen)
   const backendStatus = useBackendHealth()
+  useEffect(() => {
+    if (backendStatus === 'online') void hydrateResources().catch(() => undefined)
+  }, [backendStatus, hydrateResources])
+
 
   return (
     <div

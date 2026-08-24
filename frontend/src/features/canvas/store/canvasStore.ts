@@ -9,6 +9,9 @@ import {
 import { create } from 'zustand'
 
 import type { CanvasImage, CanvasNode, CanvasTool, ProjectCanvasState } from '../../../types/domain'
+import { useAppStore } from '../../../app/store'
+import * as resourcesApi from '../../../lib/resourcesApi'
+import type { ImageDto, ImagePatch } from '../../../lib/resourcesApi'
 import { validateImageFiles } from '../model/files'
 import { createInitialCanvases } from './fixtures'
 
@@ -64,6 +67,40 @@ function updateCanvas(
   return { ...canvases, [projectId]: update(canvas) }
 }
 
+function nodeFromDto(value: ImageDto): CanvasNode {
+  return {
+    id: value.id,
+    type: 'image',
+    position: { x: value.position_x, y: value.position_y },
+    data: {
+      image: {
+        id: value.id,
+        projectId: value.project_id,
+        imageUrl: value.image_url,
+        imageSource: 'stored',
+        fileName: value.file_name,
+        prompt: value.prompt,
+        tags: value.tags,
+        parentId: value.parent_id,
+        createdTime: value.created_time,
+      },
+    },
+  }
+}
+
+function canvasFromDtos(values: ImageDto[]): ProjectCanvasState {
+  return {
+    nodes: values.map(nodeFromDto),
+    edges: values.filter((value) => value.parent_id).map((value) => ({
+      id: `edge-${value.parent_id}-${value.id}`,
+      source: value.parent_id as string,
+      target: value.id,
+      type: 'smoothstep',
+    })),
+    selectedNodeId: null,
+  }
+}
+
 interface CanvasStore {
   canvases: Record<string, ProjectCanvasState>
   activeTool: CanvasTool
@@ -76,6 +113,13 @@ interface CanvasStore {
   connectNodes: (projectId: string, connection: Connection) => void
   addUploadedImages: (projectId: string, files: readonly File[], position: XYPosition) => string[]
   duplicateNode: (projectId: string, nodeId: string) => string | null
+  loadCanvas: (projectId: string) => Promise<void>
+  uploadPersistedImages: (projectId: string, files: readonly File[], position: XYPosition) => Promise<string[]>
+  persistPosition: (projectId: string, nodeId: string, position: XYPosition) => Promise<void>
+  persistConnection: (projectId: string, source: string, target: string) => Promise<void>
+  persistMetadata: (projectId: string, nodeId: string, changes: ImagePatch) => Promise<void>
+  duplicatePersistedNode: (projectId: string, nodeId: string) => Promise<string>
+  deletePersistedNode: (projectId: string, nodeId: string) => Promise<void>
   deleteNode: (projectId: string, nodeId: string) => void
   updateImage: (projectId: string, nodeId: string, changes: Partial<Pick<CanvasImage, 'prompt' | 'tags'>>) => void
   reset: () => void
@@ -241,6 +285,124 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       })),
       error: null,
     }))
+  },
+  loadCanvas: async (projectId) => {
+    useAppStore.getState().setSaveState('loading')
+    try {
+      const values = await resourcesApi.listImages(projectId)
+      set((state) => ({ canvases: { ...state.canvases, [projectId]: canvasFromDtos(values) }, error: null }))
+      useAppStore.getState().setSaveState('saved')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '画布加载失败'
+      set({ error: message })
+      useAppStore.getState().setSaveState('offline', message)
+      throw error
+    }
+  },
+  uploadPersistedImages: async (projectId, files, position) => {
+    const validation = validateImageFiles(files)
+    if (validation.errors.length) set({ error: validation.errors[0] })
+    useAppStore.getState().setSaveState('saving')
+    try {
+      const values: ImageDto[] = []
+      for (const [index, file] of validation.valid.entries()) {
+        values.push(await resourcesApi.uploadImage(projectId, file, {
+          prompt: '尚未添加 Prompt',
+          positionX: position.x + (index % 2) * 270,
+          positionY: position.y + Math.floor(index / 2) * 230,
+        }))
+      }
+      set((state) => ({
+        canvases: updateCanvas(state.canvases, projectId, (canvas) => ({
+          ...canvas,
+          nodes: [...canvas.nodes, ...values.map(nodeFromDto)],
+        })),
+        error: validation.errors[0] ?? null,
+      }))
+      useAppStore.getState().setSaveState('saved')
+      return values.map((value) => value.id)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '图片上传失败'
+      set({ error: message })
+      useAppStore.getState().setSaveState('error', message)
+      throw error
+    }
+  },
+  persistPosition: async (projectId, nodeId, position) => {
+    useAppStore.getState().setSaveState('saving')
+    try {
+      await resourcesApi.patchImage(nodeId, { position_x: position.x, position_y: position.y })
+      set((state) => ({ canvases: updateCanvas(state.canvases, projectId, (canvas) => ({ ...canvas, nodes: canvas.nodes.map((node) => node.id === nodeId ? { ...node, position } : node) })) }))
+      useAppStore.getState().setSaveState('saved')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '位置保存失败'
+      useAppStore.getState().setSaveState('error', message)
+      throw error
+    }
+  },
+  persistConnection: async (projectId, source, target) => {
+    useAppStore.getState().setSaveState('saving')
+    try {
+      const value = await resourcesApi.patchImage(target, { parent_id: source })
+      set((state) => ({ canvases: updateCanvas(state.canvases, projectId, (canvas) => syncParentIds({
+        ...canvas,
+        nodes: canvas.nodes.map((node) => node.id === target ? { ...nodeFromDto(value), selected: node.selected } : node),
+        edges: [
+          ...canvas.edges.filter((edge) => edge.target !== target),
+          ...(value.parent_id ? [{
+            id: `edge-${value.parent_id}-${value.id}`,
+            source: value.parent_id,
+            target: value.id,
+            type: 'smoothstep',
+          }] : []),
+        ],
+      })) }))
+      useAppStore.getState().setSaveState('saved')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '关系保存失败'
+      set({ error: message })
+      useAppStore.getState().setSaveState('error', message)
+      throw error
+    }
+  },
+  persistMetadata: async (projectId, nodeId, changes) => {
+    useAppStore.getState().setSaveState('saving')
+    try {
+      const value = await resourcesApi.patchImage(nodeId, changes)
+      set((state) => ({ canvases: updateCanvas(state.canvases, projectId, (canvas) => ({ ...canvas, nodes: canvas.nodes.map((node) => node.id === nodeId ? nodeFromDto(value) : node) })) }))
+      useAppStore.getState().setSaveState('saved')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '信息保存失败'
+      useAppStore.getState().setSaveState('error', message)
+      throw error
+    }
+  },
+  duplicatePersistedNode: async (projectId, nodeId) => {
+    useAppStore.getState().setSaveState('saving')
+    try {
+      const value = await resourcesApi.duplicateImage(nodeId)
+      set((state) => ({ canvases: updateCanvas(state.canvases, projectId, (canvas) => ({ ...canvas, selectedNodeId: value.id, nodes: [...canvas.nodes.map((node) => ({ ...node, selected: false })), { ...nodeFromDto(value), selected: true }] })) }))
+      useAppStore.getState().setSaveState('saved')
+      return value.id
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '图片复制失败'
+      set({ error: message })
+      useAppStore.getState().setSaveState('error', message)
+      throw error
+    }
+  },
+  deletePersistedNode: async (projectId, nodeId) => {
+    useAppStore.getState().setSaveState('saving')
+    try {
+      await resourcesApi.deleteImage(nodeId)
+      set((state) => ({ canvases: updateCanvas(state.canvases, projectId, (canvas) => syncParentIds({ ...canvas, selectedNodeId: canvas.selectedNodeId === nodeId ? null : canvas.selectedNodeId, nodes: canvas.nodes.filter((node) => node.id !== nodeId), edges: canvas.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId) })) }))
+      useAppStore.getState().setSaveState('saved')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '图片删除失败'
+      set({ error: message })
+      useAppStore.getState().setSaveState('error', message)
+      throw error
+    }
   },
   reset: () => set({ canvases: createInitialCanvases(), activeTool: 'select', error: null }),
 }))

@@ -17,6 +17,9 @@ export function ImageInspector() {
   const updateImage = useCanvasStore((state) => state.updateImage)
   const duplicateNode = useCanvasStore((state) => state.duplicateNode)
   const deleteNode = useCanvasStore((state) => state.deleteNode)
+  const persistMetadata = useCanvasStore((state) => state.persistMetadata)
+  const duplicatePersistedNode = useCanvasStore((state) => state.duplicatePersistedNode)
+  const deletePersistedNode = useCanvasStore((state) => state.deletePersistedNode)
   const [prompt, setPrompt] = useState('')
   const [tagsText, setTagsText] = useState('')
   const [copied, setCopied] = useState(false)
@@ -35,6 +38,9 @@ export function ImageInspector() {
       prompt: prompt.trim() || '尚未添加 Prompt',
       tags: tagsText.split(/[,，]/),
     })
+    if (selected.data.image.imageSource === 'stored') {
+      void persistMetadata(projectId, selected.id, { prompt: prompt.trim() || '尚未添加 Prompt', tags: tagsText.split(/[,，]/) })
+    }
   }
 
   const copyPrompt = async () => {
@@ -80,9 +86,9 @@ export function ImageInspector() {
             </dl>
           </section>
           <footer className="inspector-actions">
-            <button type="button" onClick={() => duplicateNode(projectId, selected.id)}><Copy size={14} />复制版本</button>
+            <button type="button" onClick={() => selected.data.image.imageSource === 'stored' ? void duplicatePersistedNode(projectId, selected.id) : duplicateNode(projectId, selected.id)}><Copy size={14} />复制版本</button>
             {confirmingDelete ? (
-              <div className="inspector-delete-confirm"><span>确定删除？</span><button type="button" onClick={() => deleteNode(projectId, selected.id)}>删除</button><button type="button" onClick={() => setConfirmingDelete(false)}>取消</button></div>
+              <div className="inspector-delete-confirm"><span>确定删除？</span><button type="button" onClick={() => selected.data.image.imageSource === 'stored' ? void deletePersistedNode(projectId, selected.id) : deleteNode(projectId, selected.id)}>删除</button><button type="button" onClick={() => setConfirmingDelete(false)}>取消</button></div>
             ) : (
               <button className="danger-text" type="button" onClick={() => setConfirmingDelete(true)}><Trash2 size={14} />删除</button>
             )}

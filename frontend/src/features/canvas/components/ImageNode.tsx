@@ -18,6 +18,8 @@ export function ImageNode({ data, selected }: NodeProps<CanvasNode>) {
   const deleteNode = useCanvasStore((state) => state.deleteNode)
   const { image } = data
 
+  const duplicatePersistedNode = useCanvasStore((state) => state.duplicatePersistedNode)
+  const deletePersistedNode = useCanvasStore((state) => state.deletePersistedNode)
   return (
     <article className={`image-node ${selected ? 'image-node--selected' : ''}`}>
       <Handle
@@ -41,7 +43,7 @@ export function ImageNode({ data, selected }: NodeProps<CanvasNode>) {
           {confirmingDelete ? (
             <>
               <span>确认删除？</span>
-              <IconButton label="确认删除" onClick={() => deleteNode(image.projectId, image.id)}>
+              <IconButton label="确认删除" onClick={() => image.imageSource === 'stored' ? void deletePersistedNode(image.projectId, image.id) : deleteNode(image.projectId, image.id)}>
                 <Check size={13} />
               </IconButton>
               <IconButton label="取消删除" onClick={() => setConfirmingDelete(false)}>
@@ -50,7 +52,7 @@ export function ImageNode({ data, selected }: NodeProps<CanvasNode>) {
             </>
           ) : (
             <>
-              <IconButton label="复制节点" onClick={() => duplicateNode(image.projectId, image.id)}>
+              <IconButton label="复制节点" onClick={() => image.imageSource === 'stored' ? void duplicatePersistedNode(image.projectId, image.id) : duplicateNode(image.projectId, image.id)}>
                 <Copy size={13} />
               </IconButton>
               <IconButton label="删除节点" onClick={() => setConfirmingDelete(true)}>

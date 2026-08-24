@@ -25,6 +25,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, type ChangeEvent, type DragEvent, type KeyboardEvent } from 'react'
 
+import { SaveStatus } from '../../components/SaveStatus'
 import { useAppStore } from '../../app/store'
 import { IconButton } from '../../components/IconButton'
 import type { BackendStatus } from '../../lib/useBackendHealth'
@@ -48,11 +49,18 @@ function Board({ projectId }: { projectId: string }) {
   const applyNodeChanges = useCanvasStore((state) => state.applyNodeChanges)
   const applyEdgeChanges = useCanvasStore((state) => state.applyEdgeChanges)
   const selectNode = useCanvasStore((state) => state.selectNode)
-  const connectNodes = useCanvasStore((state) => state.connectNodes)
-  const addUploadedImages = useCanvasStore((state) => state.addUploadedImages)
   const deleteNode = useCanvasStore((state) => state.deleteNode)
+  const loadCanvas = useCanvasStore((state) => state.loadCanvas)
+  const uploadPersistedImages = useCanvasStore((state) => state.uploadPersistedImages)
+  const persistPosition = useCanvasStore((state) => state.persistPosition)
+  const persistConnection = useCanvasStore((state) => state.persistConnection)
+  const deletePersistedNode = useCanvasStore((state) => state.deletePersistedNode)
   const { fitView, screenToFlowPosition, zoomIn, zoomOut, zoomTo } = useReactFlow()
   const { zoom } = useViewport()
+
+  useEffect(() => {
+    if (useAppStore.getState().saveStatus !== 'offline') void loadCanvas(projectId).catch(() => undefined)
+  }, [loadCanvas, projectId])
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -60,29 +68,34 @@ function Board({ projectId }: { projectId: string }) {
       if (target?.matches('input, textarea, [contenteditable="true"]')) return
       if ((event.key === 'Delete' || event.key === 'Backspace') && canvas.selectedNodeId) {
         event.preventDefault()
-        deleteNode(projectId, canvas.selectedNodeId)
+        const selectedNode = canvas.nodes.find((node) => node.id === canvas.selectedNodeId)
+        if (selectedNode?.data.image.imageSource === 'stored') {
+          void deletePersistedNode(projectId, canvas.selectedNodeId).catch(() => undefined)
+        } else {
+          deleteNode(projectId, canvas.selectedNodeId)
+        }
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [canvas.selectedNodeId, deleteNode, projectId])
+  }, [canvas.nodes, canvas.selectedNodeId, deleteNode, deletePersistedNode, projectId])
 
-  const addFiles = (files: FileList | null, clientX?: number, clientY?: number) => {
+  const addFiles = async (files: FileList | null, clientX?: number, clientY?: number) => {
     if (!files?.length) return
     const position = clientX === undefined
       ? screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
       : screenToFlowPosition({ x: clientX, y: clientY ?? 0 })
-    const ids = addUploadedImages(projectId, Array.from(files), position)
+    const ids = await uploadPersistedImages(projectId, Array.from(files), position)
     if (ids[0]) selectNode(projectId, ids[0])
   }
 
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
-    addFiles(event.dataTransfer.files, event.clientX, event.clientY)
+    void addFiles(event.dataTransfer.files, event.clientX, event.clientY)
   }
 
   const onInput = (event: ChangeEvent<HTMLInputElement>) => {
-    addFiles(event.target.files)
+    void addFiles(event.target.files)
     event.target.value = ''
   }
 
@@ -104,7 +117,10 @@ function Board({ projectId }: { projectId: string }) {
         nodeTypes={nodeTypes}
         onNodesChange={(changes) => applyNodeChanges(projectId, changes)}
         onEdgesChange={(changes) => applyEdgeChanges(projectId, changes)}
-        onConnect={(connection) => connectNodes(projectId, connection)}
+        onConnect={(connection) => {
+          if (connection.source && connection.target) void persistConnection(projectId, connection.source, connection.target)
+        }}
+        onNodeDragStop={(_, node) => void persistPosition(projectId, node.id, node.position)}
         onNodeClick={(_, node) => selectNode(projectId, node.id)}
         onPaneClick={() => selectNode(projectId, null)}
         nodesDraggable={activeTool === 'select'}
@@ -161,6 +177,8 @@ export function CanvasBoard({ backendStatus }: CanvasBoardProps) {
   const toggleLeftPanel = useAppStore((state) => state.toggleLeftPanel)
   const toggleRightPanel = useAppStore((state) => state.toggleRightPanel)
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0]
+  const hydrateResources = useAppStore((state) => state.hydrateResources)
+  const loadCanvas = useCanvasStore((state) => state.loadCanvas)
 
   return (
     <main className="canvas-workspace">
@@ -172,6 +190,7 @@ export function CanvasBoard({ backendStatus }: CanvasBoardProps) {
         </div>
         <div className="canvas-actions">
           <div className={`backend-status backend-status--${backendStatus}`} role="status"><span className="status-mark" />{statusText[backendStatus]}</div>
+          <SaveStatus onRetry={() => void hydrateResources().then(() => loadCanvas(activeProject.id)).catch(() => undefined)} />
           <IconButton label="搜索将在后续阶段开放" disabled><Search size={16} /></IconButton>
           <IconButton label="帮助：拖动空白区域平移，滚轮缩放"><CircleHelp size={16} /></IconButton>
           <IconButton label="切换详情栏" onClick={toggleRightPanel}><PanelRightClose size={16} /></IconButton>

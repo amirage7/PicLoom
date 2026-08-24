@@ -28,7 +28,7 @@ describe('AI Image Canvas shell', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /产品概念图/ }))
+    await user.click(screen.getByRole('button', { name: /^产品概念图 12$/ }))
 
     expect(screen.getByRole('heading', { name: '产品概念图' })).toBeInTheDocument()
   })
