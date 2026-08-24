@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 
 import type { Project, Prompt } from '../types/domain'
+import * as resourcesApi from '../lib/resourcesApi'
+import type { ProjectDto, PromptDto } from '../lib/resourcesApi'
 
 
 const projects: Project[] = [
@@ -33,6 +35,25 @@ const prompts: Prompt[] = [
   { id: 'editorial-illustration', title: '现代编辑插画', content: 'Contemporary editorial illustration, confident shapes, limited palette, tactile print texture', category: '插画', createdTime: '2026-08-15T09:25:00+08:00' },
 ]
 
+export type SaveStatus = 'idle' | 'loading' | 'saving' | 'saved' | 'error' | 'offline'
+
+const toProject = (value: ProjectDto): Project => ({
+  id: value.id,
+  name: value.name,
+  createdTime: value.created_time,
+  imageCount: value.image_count,
+})
+
+const toPrompt = (value: PromptDto): Prompt => ({
+  id: value.id,
+  title: value.title,
+  content: value.content,
+  category: value.category as Prompt['category'],
+  createdTime: value.created_time,
+})
+
+const errorMessage = (error: unknown) => error instanceof Error ? error.message : '保存失败'
+
 interface AppState {
   projects: Project[]
   prompts: Prompt[]
@@ -41,10 +62,21 @@ interface AppState {
   isRightPanelOpen: boolean
   selectProject: (projectId: string) => void
   toggleLeftPanel: () => void
+  saveStatus: SaveStatus
+  error: string | null
+  hydrateResources: () => Promise<void>
+  createProject: (name: string) => Promise<Project>
+  renameProject: (id: string, name: string) => Promise<void>
+  deleteProject: (id: string) => Promise<void>
+  createPrompt: (value: Pick<Prompt, 'title' | 'content' | 'category'>) => Promise<Prompt>
+  editPrompt: (id: string, value: Partial<Pick<Prompt, 'title' | 'content' | 'category'>>) => Promise<void>
+  duplicatePrompt: (id: string) => Promise<Prompt>
+  deletePrompt: (id: string) => Promise<void>
+  setSaveState: (saveStatus: SaveStatus, error?: string | null) => void
   toggleRightPanel: () => void
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   projects,
   prompts,
   activeProjectId: projects[0].id,
@@ -53,4 +85,110 @@ export const useAppStore = create<AppState>((set) => ({
   selectProject: (activeProjectId) => set({ activeProjectId }),
   toggleLeftPanel: () => set((state) => ({ isLeftPanelOpen: !state.isLeftPanelOpen })),
   toggleRightPanel: () => set((state) => ({ isRightPanelOpen: !state.isRightPanelOpen })),
+  saveStatus: 'idle',
+  error: null,
+  setSaveState: (saveStatus, error = null) => set({ saveStatus, error }),
+  hydrateResources: async () => {
+    set({ saveStatus: 'loading', error: null })
+    try {
+      const [projectDtos, promptDtos] = await Promise.all([
+        resourcesApi.listProjects(),
+        resourcesApi.listPrompts(),
+      ])
+      const nextProjects = projectDtos.map(toProject)
+      const currentId = get().activeProjectId
+      set({
+        projects: nextProjects,
+        prompts: promptDtos.map(toPrompt),
+        activeProjectId: nextProjects.some((item) => item.id === currentId)
+          ? currentId
+          : nextProjects[0]?.id ?? '',
+        saveStatus: 'saved',
+        error: null,
+      })
+    } catch (error) {
+      set({ saveStatus: 'offline', error: errorMessage(error) })
+      throw error
+    }
+  },
+  createProject: async (name) => {
+    set({ saveStatus: 'saving', error: null })
+    try {
+      const project = toProject(await resourcesApi.createProject(name))
+      set((state) => ({
+        projects: [...state.projects, project],
+        activeProjectId: project.id,
+        saveStatus: 'saved',
+      }))
+      return project
+    } catch (error) {
+      set({ saveStatus: 'error', error: errorMessage(error) })
+      throw error
+    }
+  },
+  renameProject: async (id, name) => {
+    set({ saveStatus: 'saving', error: null })
+    try {
+      const updated = toProject(await resourcesApi.renameProject(id, name))
+      set((state) => ({ projects: state.projects.map((item) => item.id === id ? updated : item), saveStatus: 'saved' }))
+    } catch (error) {
+      set({ saveStatus: 'error', error: errorMessage(error) })
+      throw error
+    }
+  },
+  deleteProject: async (id) => {
+    set({ saveStatus: 'saving', error: null })
+    try {
+      await resourcesApi.deleteProject(id)
+      set((state) => {
+        const remaining = state.projects.filter((item) => item.id !== id)
+        return { projects: remaining, activeProjectId: state.activeProjectId === id ? remaining[0]?.id ?? '' : state.activeProjectId, saveStatus: 'saved' }
+      })
+    } catch (error) {
+      set({ saveStatus: 'error', error: errorMessage(error) })
+      throw error
+    }
+  },
+  createPrompt: async (value) => {
+    set({ saveStatus: 'saving', error: null })
+    try {
+      const prompt = toPrompt(await resourcesApi.createPrompt(value))
+      set((state) => ({ prompts: [prompt, ...state.prompts], saveStatus: 'saved' }))
+      return prompt
+    } catch (error) {
+      set({ saveStatus: 'error', error: errorMessage(error) })
+      throw error
+    }
+  },
+  editPrompt: async (id, value) => {
+    set({ saveStatus: 'saving', error: null })
+    try {
+      const updated = toPrompt(await resourcesApi.updatePrompt(id, value))
+      set((state) => ({ prompts: state.prompts.map((item) => item.id === id ? updated : item), saveStatus: 'saved' }))
+    } catch (error) {
+      set({ saveStatus: 'error', error: errorMessage(error) })
+      throw error
+    }
+  },
+  duplicatePrompt: async (id) => {
+    set({ saveStatus: 'saving', error: null })
+    try {
+      const prompt = toPrompt(await resourcesApi.duplicatePrompt(id))
+      set((state) => ({ prompts: [prompt, ...state.prompts], saveStatus: 'saved' }))
+      return prompt
+    } catch (error) {
+      set({ saveStatus: 'error', error: errorMessage(error) })
+      throw error
+    }
+  },
+  deletePrompt: async (id) => {
+    set({ saveStatus: 'saving', error: null })
+    try {
+      await resourcesApi.deletePrompt(id)
+      set((state) => ({ prompts: state.prompts.filter((item) => item.id !== id), saveStatus: 'saved' }))
+    } catch (error) {
+      set({ saveStatus: 'error', error: errorMessage(error) })
+      throw error
+    }
+  },
 }))
