@@ -16,7 +16,7 @@ if (-not (Test-Path $pythonPath)) {
 $backendJob = Start-Job -Name 'ai-image-canvas-backend' -ArgumentList $pythonPath, $backendRoot -ScriptBlock {
     param($pythonExecutable, $workingDirectory)
     Set-Location -LiteralPath $workingDirectory
-    & $pythonExecutable -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+    & $pythonExecutable -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 }
 
 $frontendJob = Start-Job -Name 'ai-image-canvas-frontend' -ArgumentList $frontendRoot -ScriptBlock {

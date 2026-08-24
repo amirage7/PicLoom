@@ -5,7 +5,7 @@
 1. 在 `extension` 目录运行 `npm install` 和 `npm run build`。
 2. Chrome 打开 `chrome://extensions`，启用“开发者模式”。
 3. 选择“加载已解压的扩展程序”，指向 `extension/dist`。
-4. 同时启动 FastAPI `127.0.0.1:8000` 和 WebUI `127.0.0.1:3000`。
+4. 同时启动 FastAPI `127.0.0.1:8001` 和 WebUI `127.0.0.1:3000`。
 5. 在 Canvas 工具栏打开“使用 ChatGPT 生成图片”，生成六位配对码。
 6. 打开扩展 popup，输入配对码。
 7. 在 `https://chatgpt.com/` 官方页面手动登录。
@@ -13,7 +13,7 @@
 ## 安全边界
 
 - AI Image Canvas 不请求或保存 ChatGPT 账号、密码、两步验证码和 Cookie。
-- 扩展只访问 `chatgpt.com` 和本机 `127.0.0.1:8000`。
+- 扩展只访问 `chatgpt.com` 和本机 `127.0.0.1:8001`。
 - 遇到登录、验证码、安全检查、内容拒绝或限额时立即停止，不会绕过。
 - 失败任务不自动重发；只有用户再次点击才会创建新任务。
 

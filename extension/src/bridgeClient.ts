@@ -1,7 +1,7 @@
 import type { GenerationStatus, GenerationTask } from './shared/protocol'
 
 
-const API_BASE = 'http://127.0.0.1:8000/api'
+const API_BASE = 'http://127.0.0.1:8001/api'
 
 
 export class BridgeClientError extends Error {}

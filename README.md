@@ -37,8 +37,8 @@ npm run dev -- --host 127.0.0.1 --port 3000
 ```
 
 - WebUI: <http://127.0.0.1:3000>
-- Backend health: <http://127.0.0.1:8000/api/health>
-- API docs: <http://127.0.0.1:8000/docs>
+- Backend health: <http://127.0.0.1:8001/api/health>
+- API docs: <http://127.0.0.1:8001/docs>
 
 ## 测试
 
