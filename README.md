@@ -78,3 +78,16 @@ Phase 4 当前支持：
 ## 数据边界
 
 所有数据只写入本机 `data/` 目录。备份时先停止服务，再复制完整的 `data/` 目录。Phase 5 将准备可替换的 ImageProvider 与 PromptProvider 接口；未来生成能力不会绑定 OpenAI API。
+## ChatGPT 网页生图
+
+本功能通过本地 Chrome 扩展控制用户已经登录的官方 ChatGPT 普通 Chat 页面，不调用 OpenAI API，也不使用 Work 或 Codex。ChatGPT 套餐、图片生成限额和内容政策仍然适用。
+
+```powershell
+cd extension
+npm install
+npm run build
+```
+
+在 Chrome 的 `chrome://extensions` 开启开发者模式并加载 `extension/dist`。启动前后端后，在 Canvas 工具栏打开 ChatGPT 生图面板，生成一次性配对码并输入扩展；ChatGPT 登录必须由用户本人在官方页面完成。
+
+详细步骤和错误说明见 `docs/chatgpt-extension-troubleshooting.md`。
