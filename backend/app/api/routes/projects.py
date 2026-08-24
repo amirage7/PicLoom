@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_session
 from app.schemas.resources import ProjectCreate, ProjectResponse, ProjectUpdate
 from app.services import resources
+from app.services.image_storage import remove_project_directory
 
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -28,9 +29,10 @@ def patch_project(project_id: str, payload: ProjectUpdate, session: Session = De
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_project(project_id: str, session: Session = Depends(get_session)) -> Response:
+def remove_project(request: Request, project_id: str, session: Session = Depends(get_session)) -> Response:
     try:
         resources.delete_project(session, project_id)
+        remove_project_directory(request.app.state.settings.images_dir, project_id)
     except resources.ResourceNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except resources.ResourceConflictError as error:

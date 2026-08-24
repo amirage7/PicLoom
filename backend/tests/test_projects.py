@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 
@@ -29,3 +31,20 @@ def test_last_project_cannot_be_deleted(client: TestClient) -> None:
     response = client.delete(f"/api/projects/{projects[-1]['id']}")
     assert response.status_code == 409
     assert response.json()["detail"] == "至少需要保留一个项目"
+
+def test_project_delete_removes_its_image_directory(
+    client: TestClient,
+    image_bytes,
+    data_root: Path,
+) -> None:
+    uploaded = client.post(
+        "/api/projects/future-city/images",
+        files={"file": ("source.png", image_bytes("PNG"), "image/png")},
+    )
+    assert uploaded.status_code == 201
+    stored = data_root / uploaded.json()["image_path"]
+    assert stored.exists()
+
+    assert client.delete("/api/projects/future-city").status_code == 204
+    assert not stored.exists()
+    assert not (data_root / "images" / "future-city").exists()
