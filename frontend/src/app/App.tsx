@@ -61,6 +61,7 @@ export default function App() {
         isRightPanelOpen={panels.isRightOpen}
         onToggleLeft={(trigger) => panels.toggleLeft(trigger)}
         onToggleRight={(trigger) => panels.toggleRight(trigger)}
+        shortcutsEnabled={!panels.isCompact || (!panels.isLeftOpen && !panels.isRightOpen)}
       />
 
       {panels.isCompact && (panels.isLeftOpen || panels.isRightOpen) && <button type="button" className="panel-backdrop" aria-label="关闭侧栏" onClick={() => panels.closePanels()} />}
