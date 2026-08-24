@@ -1,0 +1,29 @@
+.worktrees/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+
+# Python
+backend/.venv/
+backend/.pytest_cache/
+backend/**/__pycache__/
+backend/**/*.py[cod]
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Runtime data
+data/*.sqlite
+data/*.sqlite-*
+data/images/**
+!data/images/.gitkeep
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
