@@ -35,4 +35,27 @@ describe('PromptLibrary management', () => {
     await user.click(screen.getByRole('button', { name: '删除' }))
     expect(useAppStore.getState().deletePrompt).toHaveBeenCalledWith('prompt-one')
   })
+
+  it('teaches the first Prompt action when the list is empty', async () => {
+    useAppStore.setState({ prompts: [] })
+    const user = userEvent.setup()
+    render(<PromptLibrary />)
+
+    expect(screen.getByText('还没有 Prompt')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '创建第一个 Prompt' }))
+    expect(screen.getByRole('textbox', { name: 'Prompt 标题' })).toBeInTheDocument()
+  })
+
+  it('closes the editor with Escape and restores focus', async () => {
+    const user = userEvent.setup()
+    render(<PromptLibrary />)
+    const trigger = screen.getByRole('button', { name: '新建 Prompt' })
+
+    await user.click(trigger)
+    await user.type(screen.getByRole('textbox', { name: 'Prompt 标题' }), '未保存')
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('textbox', { name: 'Prompt 标题' })).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
 })

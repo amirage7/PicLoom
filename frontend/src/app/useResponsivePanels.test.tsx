@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -26,6 +26,7 @@ function Harness() {
     <output aria-label="布局">{panels.isCompact ? 'compact' : 'wide'}</output>
     <output aria-label="导航">{panels.isLeftOpen ? 'open' : 'closed'}</output>
     <output aria-label="详情">{panels.isRightOpen ? 'open' : 'closed'}</output>
+    <input aria-label="文本输入" />
   </>
 }
 
@@ -71,5 +72,30 @@ describe('useResponsivePanels', () => {
     expect(screen.getByLabelText('布局')).toHaveTextContent('wide')
     expect(screen.getByLabelText('导航')).toHaveTextContent('open')
     expect(screen.getByLabelText('详情')).toHaveTextContent('open')
+  })
+
+  it('toggles compact navigation and inspector with bracket shortcuts', () => {
+    mockCompact(true)
+    render(<Harness />)
+
+    fireEvent.keyDown(window, { key: '[' })
+    expect(screen.getByLabelText('导航')).toHaveTextContent('open')
+    fireEvent.keyDown(window, { key: ']' })
+
+    expect(screen.getByLabelText('导航')).toHaveTextContent('closed')
+    expect(screen.getByLabelText('详情')).toHaveTextContent('open')
+  })
+
+  it('ignores panel shortcuts while editing text', () => {
+    mockCompact(true)
+    render(<Harness />)
+    const input = screen.getByRole('textbox', { name: '文本输入' })
+    input.focus()
+
+    fireEvent.keyDown(input, { key: '[' })
+    fireEvent.keyDown(input, { key: ']' })
+
+    expect(screen.getByLabelText('导航')).toHaveTextContent('closed')
+    expect(screen.getByLabelText('详情')).toHaveTextContent('closed')
   })
 })

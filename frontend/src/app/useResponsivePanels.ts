@@ -66,9 +66,24 @@ export function useResponsivePanels() {
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || !isCompact || (!isLeftOpen && !isRightOpen)) return
-      event.preventDefault()
-      closePanels()
+      const target = event.target
+      if (event.key === 'Escape' && isCompact && (isLeftOpen || isRightOpen)) {
+        event.preventDefault()
+        closePanels()
+        return
+      }
+      const isEditing = target instanceof Element && target.closest('input, textarea, select, button, [contenteditable="true"]')
+      if (isEditing || event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.key === '[') {
+        event.preventDefault()
+        toggleLeft()
+        return
+      }
+      if (event.key === ']') {
+        event.preventDefault()
+        toggleRight()
+        return
+      }
     }
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)

@@ -1,5 +1,5 @@
 import { Box, Building2, MoreHorizontal, Plus, Sparkles, Trash2, X } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { useAppStore } from '../../app/store'
 import { IconButton } from '../../components/IconButton'
@@ -19,6 +19,28 @@ export function ProjectList() {
   const [menuId, setMenuId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const createTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null)
+
+  const startCreating = (trigger: HTMLButtonElement) => {
+    createTriggerRef.current = trigger
+    setCreating(true)
+  }
+  const cancelCreating = () => {
+    setCreating(false)
+    createTriggerRef.current?.focus()
+  }
+
+  useEffect(() => {
+    if (!menuId) return
+    const close = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setMenuId(null)
+      window.requestAnimationFrame(() => menuTriggerRef.current?.focus())
+    }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [menuId])
 
   const submitCreate = (event: FormEvent) => {
     event.preventDefault()
@@ -29,8 +51,9 @@ export function ProjectList() {
 
   return (
     <section className="sidebar-section" aria-labelledby="projects-heading">
-      <div className="section-heading-row"><h2 id="projects-heading">项目</h2><IconButton label="新建项目" onClick={() => setCreating(true)}><Plus size={15} /></IconButton></div>
-      {creating && <form className="sidebar-inline-form" onSubmit={submitCreate}><input autoFocus aria-label="项目名称" value={name} onChange={(event) => setName(event.target.value)} placeholder="项目名称" /><button type="submit" aria-label="创建项目">创建</button><IconButton label="取消新建项目" onClick={() => setCreating(false)}><X size={13} /></IconButton></form>}
+      <div className="section-heading-row"><h2 id="projects-heading">项目</h2><IconButton label="新建项目" onClick={(event) => startCreating(event.currentTarget)}><Plus size={15} /></IconButton></div>
+      {creating && <form className="sidebar-inline-form" onSubmit={submitCreate}><input autoFocus aria-label="项目名称" value={name} onChange={(event) => setName(event.target.value)} placeholder="项目名称" /><div className="form-actions"><button className="primary-button" type="submit" aria-label="创建项目">创建</button><IconButton label="取消新建项目" onClick={cancelCreating}><X size={13} /></IconButton></div></form>}
+      {projects.length === 0 && !creating && <div className="sidebar-empty"><strong>还没有项目</strong><span>创建项目来保存画布与图片版本。</span><button type="button" onClick={(event) => startCreating(event.currentTarget)}>创建第一个项目</button></div>}
       <div className="project-list">
         {projects.map((project, index) => {
           const ProjectIcon = projectIcons[index] ?? Box
@@ -39,7 +62,7 @@ export function ProjectList() {
             {renamingId === project.id ? (
               <form className="sidebar-inline-form" onSubmit={(event) => { event.preventDefault(); if (name.trim()) void renameProject(project.id, name.trim()).then(() => setRenamingId(null)) }}><input autoFocus aria-label="重命名项目" value={name} onChange={(event) => setName(event.target.value)} /><button type="submit">保存</button></form>
             ) : <button type="button" aria-current={isActive ? 'page' : undefined} className={`project-row ${isActive ? 'project-row--active' : ''}`} onClick={() => selectProject(project.id)}><span className="project-icon"><ProjectIcon size={15} /></span><span className="project-name">{project.name}</span><span className="project-count">{project.imageCount}</span></button>}
-            <IconButton className="project-menu-button" label={`管理 ${project.name}`} onClick={() => setMenuId(menuId === project.id ? null : project.id)}><MoreHorizontal size={14} /></IconButton>
+            <IconButton className="project-menu-button" label={`管理 ${project.name}`} aria-expanded={menuId === project.id} onClick={(event) => { menuTriggerRef.current = event.currentTarget; setMenuId(menuId === project.id ? null : project.id) }}><MoreHorizontal size={14} /></IconButton>
             {menuId === project.id && <div className="resource-menu">{confirmDeleteId === project.id ? <div className="resource-confirm" role="alert"><span>删除“{project.name}”？</span><button type="button" className="danger-action" onClick={() => void deleteProject(project.id).then(() => { setConfirmDeleteId(null); setMenuId(null) })}>确认删除</button><button type="button" onClick={() => setConfirmDeleteId(null)}>取消</button></div> : <><button type="button" onClick={() => { setName(project.name); setRenamingId(project.id); setMenuId(null) }}>重命名</button><button type="button" disabled={projects.length === 1} onClick={() => setConfirmDeleteId(project.id)}><Trash2 size={12} />删除</button></>}</div>}
           </div>
         })}

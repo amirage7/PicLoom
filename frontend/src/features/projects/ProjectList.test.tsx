@@ -35,4 +35,38 @@ describe('ProjectList management', () => {
     await user.click(screen.getByRole('button', { name: '确认删除' }))
     expect(useAppStore.getState().deleteProject).toHaveBeenCalledWith('one')
   })
+
+  it('teaches the first project action when the list is empty', async () => {
+    useAppStore.setState({ projects: [] })
+    const user = userEvent.setup()
+    render(<ProjectList />)
+
+    expect(screen.getByText('还没有项目')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '创建第一个项目' }))
+    expect(screen.getByRole('textbox', { name: '项目名称' })).toHaveFocus()
+  })
+
+  it('closes the project menu with Escape and restores focus', async () => {
+    const user = userEvent.setup()
+    render(<ProjectList />)
+    const trigger = screen.getByRole('button', { name: '管理 项目一' })
+
+    await user.click(trigger)
+    expect(screen.getByRole('button', { name: '重命名' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('button', { name: '重命名' })).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('restores focus after canceling project creation', async () => {
+    const user = userEvent.setup()
+    render(<ProjectList />)
+    const trigger = screen.getByRole('button', { name: '新建项目' })
+
+    await user.click(trigger)
+    await user.click(screen.getByRole('button', { name: '取消新建项目' }))
+
+    expect(trigger).toHaveFocus()
+  })
 })
