@@ -3,7 +3,7 @@
   "name": "AI Image Canvas Bridge",
   "version": "0.1.0",
   "description": "Connects the local AI Image Canvas to a visible, user-authenticated ChatGPT tab.",
-  "permissions": ["storage", "tabs", "activeTab"],
+  "permissions": ["storage", "tabs", "activeTab", "alarms"],
   "host_permissions": ["http://127.0.0.1:8000/*", "https://chatgpt.com/*"],
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [{ "matches": ["https://chatgpt.com/*"], "js": ["content.js"] }],
