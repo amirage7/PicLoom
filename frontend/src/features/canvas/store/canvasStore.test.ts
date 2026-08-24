@@ -33,7 +33,12 @@ describe('canvas store', () => {
   it('replaces a child incoming relationship', () => {
     useCanvasStore
       .getState()
-      .connectNodes('future-city', { source: 'city-overview', target: 'transit-hub' })
+      .connectNodes('future-city', {
+        source: 'city-overview',
+        target: 'transit-hub',
+        sourceHandle: null,
+        targetHandle: null,
+      })
 
     const canvas = useCanvasStore.getState().canvases['future-city']
 
@@ -47,7 +52,12 @@ describe('canvas store', () => {
 
     useCanvasStore
       .getState()
-      .connectNodes('future-city', { source: 'city-overview', target: 'city-overview' })
+      .connectNodes('future-city', {
+        source: 'city-overview',
+        target: 'city-overview',
+        sourceHandle: null,
+        targetHandle: null,
+      })
 
     expect(useCanvasStore.getState().canvases['future-city'].edges).toEqual(before)
   })
@@ -78,11 +88,12 @@ describe('canvas store', () => {
       { x: 20, y: 30 },
     )
     const copyId = useCanvasStore.getState().duplicateNode('product-concepts', uploadedId)
+    expect(copyId).not.toBeNull()
 
     useCanvasStore.getState().deleteNode('product-concepts', uploadedId)
     expect(revokeObjectURL).not.toHaveBeenCalled()
 
-    useCanvasStore.getState().deleteNode('product-concepts', copyId)
+    useCanvasStore.getState().deleteNode('product-concepts', copyId!)
     expect(revokeObjectURL).toHaveBeenCalledOnce()
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:fixture')
   })
