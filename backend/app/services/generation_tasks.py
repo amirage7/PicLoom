@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.entities import Image, Project
+from app.services.image_storage import store_image
 from app.models.generation import GenerationTask
 from app.services.resources import ResourceNotFoundError
 
@@ -91,3 +93,41 @@ def cancel_task(session: Session, task_id: str) -> GenerationTask:
     if task.status in TERMINAL_STATUSES:
         raise InvalidTaskTransition("任务已结束")
     return transition(session, task_id, "cancelled", "已取消")
+
+def complete_with_image(
+    session: Session,
+    data_dir: Path,
+    task_id: str,
+    content: bytes,
+    chat_url: str,
+) -> GenerationTask:
+    task = get_task(session, task_id)
+    if task.status != "downloading":
+        raise InvalidTaskTransition("任务尚未进入图片下载阶段")
+    stored = store_image(data_dir / "images", task.project_id, content)
+    image = Image(
+        id=str(uuid4()),
+        project_id=task.project_id,
+        image_path=stored.relative_to(data_dir).as_posix(),
+        file_name=f"chatgpt-{task.id}{stored.suffix}",
+        prompt=task.prompt,
+        tags_json=[],
+        parent_id=task.parent_image_id,
+        position_x=0,
+        position_y=0,
+        created_time=_now(),
+    )
+    try:
+        session.add(image)
+        task.status = "completed"
+        task.progress_message = "图片已保存"
+        task.chat_url = chat_url[:1024]
+        task.image_id = image.id
+        task.updated_time = _now()
+        session.commit()
+        session.refresh(task)
+    except Exception:
+        session.rollback()
+        stored.unlink(missing_ok=True)
+        raise
+    return task

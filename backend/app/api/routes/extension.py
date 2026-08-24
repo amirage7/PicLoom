@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_session
@@ -7,6 +7,7 @@ from app.schemas.bridge import ExtensionHeartbeat, ExtensionPairRequest, Extensi
 from app.schemas.extension_tasks import ExtensionTaskUpdate
 from app.schemas.generation import GenerationTaskResponse
 from app.services import extension_bridge, generation_tasks
+from app.services.image_storage import ImageStorageError, MAX_IMAGE_BYTES
 from app.services.resources import ResourceNotFoundError
 
 
@@ -67,3 +68,24 @@ def update_task(
         raise HTTPException(status_code=404, detail=str(error)) from error
     except generation_tasks.InvalidTaskTransition as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+
+@router.post("/tasks/{task_id}/image", response_model=GenerationTaskResponse)
+async def upload_task_image(
+    request: Request,
+    task_id: str,
+    file: UploadFile = File(...),
+    chat_url: str = Form(...),
+    _connection: ExtensionConnection = Depends(require_extension),
+    session: Session = Depends(get_session),
+):
+    content = await file.read(MAX_IMAGE_BYTES + 1)
+    try:
+        return generation_tasks.complete_with_image(
+            session, request.app.state.settings.data_dir, task_id, content, chat_url,
+        )
+    except ResourceNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except generation_tasks.InvalidTaskTransition as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ImageStorageError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
