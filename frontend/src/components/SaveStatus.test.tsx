@@ -16,4 +16,11 @@ describe('SaveStatus', () => {
     render(<SaveStatus onRetry={vi.fn()} />)
     expect(screen.getByText(label)).toBeInTheDocument()
   })
+
+  it('announces state changes politely and atomically', () => {
+    render(<SaveStatus onRetry={vi.fn()} />)
+    const status = screen.getByRole('status')
+    expect(status).toHaveAttribute('aria-live', 'polite')
+    expect(status).toHaveAttribute('aria-atomic', 'true')
+  })
 })

@@ -23,7 +23,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useEffect, useRef, type ChangeEvent, type DragEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, type ChangeEvent, type DragEvent } from 'react'
 
 import { SaveStatus } from '../../components/SaveStatus'
 import { useAppStore } from '../../app/store'
@@ -31,15 +31,23 @@ import { IconButton } from '../../components/IconButton'
 import type { BackendStatus } from '../../lib/useBackendHealth'
 import { ImageNode } from './components/ImageNode'
 import { useCanvasStore } from './store/canvasStore'
+import { useCanvasShortcuts } from './useCanvasShortcuts'
 
-interface CanvasBoardProps { backendStatus: BackendStatus }
+interface CanvasBoardProps {
+  backendStatus: BackendStatus
+  isLeftPanelOpen: boolean
+  isRightPanelOpen: boolean
+  onToggleLeft: (trigger: HTMLButtonElement) => void
+  onToggleRight: (trigger: HTMLButtonElement) => void
+  shortcutsEnabled: boolean
+}
 
 const nodeTypes: NodeTypes = { image: ImageNode }
 const statusText: Record<BackendStatus, string> = {
   checking: '正在连接', online: '本地服务在线', offline: '后端离线',
 }
 
-function Board({ projectId }: { projectId: string }) {
+function Board({ projectId, shortcutsEnabled }: { projectId: string; shortcutsEnabled: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const canvas = useCanvasStore((state) => state.canvases[projectId]) ?? { nodes: [], edges: [], selectedNodeId: null }
   const activeTool = useCanvasStore((state) => state.activeTool)
@@ -57,6 +65,13 @@ function Board({ projectId }: { projectId: string }) {
   const deletePersistedNode = useCanvasStore((state) => state.deletePersistedNode)
   const { fitView, screenToFlowPosition, zoomIn, zoomOut, zoomTo } = useReactFlow()
   const { zoom } = useViewport()
+  useCanvasShortcuts({
+    select: () => setTool('select'),
+    pan: () => setTool('pan'),
+    fit: () => void fitView({ padding: 0.22 }),
+    clear: () => selectNode(projectId, null),
+    enabled: shortcutsEnabled,
+  })
 
   useEffect(() => {
     if (useAppStore.getState().saveStatus !== 'offline') void loadCanvas(projectId).catch(() => undefined)
@@ -99,17 +114,11 @@ function Board({ projectId }: { projectId: string }) {
     event.target.value = ''
   }
 
-  const onBoardKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'v') setTool('select')
-    if (event.key === 'h') setTool('pan')
-  }
-
   return (
     <div
       className="canvas-surface"
       onDragOver={(event) => event.preventDefault()}
       onDrop={onDrop}
-      onKeyDown={onBoardKeyDown}
     >
       <ReactFlow
         nodes={canvas.nodes}
@@ -171,11 +180,9 @@ function Board({ projectId }: { projectId: string }) {
   )
 }
 
-export function CanvasBoard({ backendStatus }: CanvasBoardProps) {
+export function CanvasBoard({ backendStatus, isLeftPanelOpen, isRightPanelOpen, onToggleLeft, onToggleRight, shortcutsEnabled }: CanvasBoardProps) {
   const projects = useAppStore((state) => state.projects)
   const activeProjectId = useAppStore((state) => state.activeProjectId)
-  const toggleLeftPanel = useAppStore((state) => state.toggleLeftPanel)
-  const toggleRightPanel = useAppStore((state) => state.toggleRightPanel)
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0]
   const hydrateResources = useAppStore((state) => state.hydrateResources)
   const loadCanvas = useCanvasStore((state) => state.loadCanvas)
@@ -184,7 +191,7 @@ export function CanvasBoard({ backendStatus }: CanvasBoardProps) {
     <main className="canvas-workspace">
       <header className="canvas-header">
         <div className="canvas-title-group">
-          <IconButton label="切换左侧栏" onClick={toggleLeftPanel}><PanelLeftClose size={16} /></IconButton>
+          <IconButton label="切换左侧栏" aria-controls="workspace-navigation" aria-expanded={isLeftPanelOpen} onClick={(event) => onToggleLeft(event.currentTarget)}><PanelLeftClose size={16} /></IconButton>
           <span className="breadcrumb">项目</span><span className="breadcrumb-separator">/</span>
           <h1>{activeProject.name}</h1><ChevronDown size={14} aria-hidden="true" />
         </div>
@@ -193,10 +200,10 @@ export function CanvasBoard({ backendStatus }: CanvasBoardProps) {
           <SaveStatus onRetry={() => void hydrateResources().then(() => loadCanvas(activeProject.id)).catch(() => undefined)} />
           <IconButton label="搜索将在后续阶段开放" disabled><Search size={16} /></IconButton>
           <IconButton label="帮助：拖动空白区域平移，滚轮缩放"><CircleHelp size={16} /></IconButton>
-          <IconButton label="切换详情栏" onClick={toggleRightPanel}><PanelRightClose size={16} /></IconButton>
+          <IconButton label="切换详情栏" aria-controls="image-inspector" aria-expanded={isRightPanelOpen} onClick={(event) => onToggleRight(event.currentTarget)}><PanelRightClose size={16} /></IconButton>
         </div>
       </header>
-      <ReactFlowProvider key={activeProjectId}><Board projectId={activeProjectId} /></ReactFlowProvider>
+      <ReactFlowProvider key={activeProjectId}><Board projectId={activeProjectId} shortcutsEnabled={shortcutsEnabled} /></ReactFlowProvider>
     </main>
   )
 }

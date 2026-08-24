@@ -126,6 +126,7 @@
   color: var(--ink);
   background: var(--panel-raised);
   cursor: pointer;
+  border: 0;
 }
 
 .resource-confirm .danger-action {
@@ -142,6 +143,58 @@
 }
 
 .prompt-row { position: relative; }
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.primary-button,
+.sidebar-empty > button {
+  min-height: 30px;
+  padding: 0 10px;
+  color: oklch(0.12 0.01 188);
+  font-weight: 620;
+  background: var(--primary);
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.primary-button:hover,
+.sidebar-empty > button:hover { background: oklch(0.77 0.1 188); }
+
+.sidebar-inline-form input:focus,
+.prompt-editor input:focus,
+.prompt-editor textarea:focus,
+.prompt-editor select:focus {
+  border-color: var(--primary);
+  outline: 2px solid oklch(0.72 0.1 188 / 0.16);
+  outline-offset: 0;
+}
+
+.sidebar-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 5px 8px 12px;
+  padding: 12px;
+  color: var(--subtle);
+  font-size: 10px;
+  line-height: 1.45;
+  background: var(--panel-raised);
+  border-radius: 8px;
+}
+
+.sidebar-empty strong { color: var(--ink); font-size: 11px; font-weight: 620; }
+.sidebar-empty > button { margin-top: 3px; }
+.prompt-row .icon-button { width: 26px; height: 26px; }
+.prompt-row .prompt-copy { min-width: 62px; }
+.save-status button { display: inline-grid; width: 22px; height: 22px; padding: 0; place-items: center; background: transparent; border: 0; border-radius: 5px; cursor: pointer; }
+.save-status button:hover { background: oklch(0.25 0.018 188); }
 
 @media (prefers-reduced-motion: reduce) {
   .status-spinner { animation: none; }

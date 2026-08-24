@@ -1,4 +1,5 @@
-import { Check, Copy, Image, Info, Link2, Tags, Trash2 } from 'lucide-react'
+import { Check, Copy, Image, Info, Link2, Tags, Trash2, X } from 'lucide-react'
+import { IconButton } from '../../components/IconButton'
 import { useEffect, useState } from 'react'
 
 import { useAppStore } from '../../app/store'
@@ -10,7 +11,12 @@ function formatDate(value: string) {
   }).format(new Date(value))
 }
 
-export function ImageInspector() {
+interface ImageInspectorProps {
+  id?: string
+  onClose?: () => void
+}
+
+export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
   const projectId = useAppStore((state) => state.activeProjectId)
   const canvas = useCanvasStore((state) => state.canvases[projectId])
   const selected = canvas?.nodes.find((node) => node.id === canvas.selectedNodeId)
@@ -51,8 +57,8 @@ export function ImageInspector() {
   }
 
   return (
-    <aside className="inspector-panel" aria-label="图片详情">
-      <header className="inspector-header"><h2>图片详情</h2></header>
+    <aside id={id} className="inspector-panel" aria-label="图片详情">
+      <header className="inspector-header"><h2>图片详情</h2>{onClose && <IconButton className="compact-panel-close" label="关闭图片详情" onClick={onClose}><X size={15} /></IconButton>}</header>
       {!selected ? (
         <>
           <div className="inspector-empty">
