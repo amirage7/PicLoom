@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -11,6 +12,15 @@ class Settings(BaseSettings):
         "http://localhost:3000",
     )
 
+    data_dir: Path = Path(__file__).resolve().parents[3] / "data"
+
+    @property
+    def database_url(self) -> str:
+        return f"sqlite:///{(self.data_dir / 'database.sqlite').as_posix()}"
+
+    @property
+    def images_dir(self) -> Path:
+        return self.data_dir / "images"
     model_config = SettingsConfigDict(
         env_prefix="AI_IMAGE_CANVAS_",
         frozen=True,
