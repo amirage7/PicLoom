@@ -26,7 +26,7 @@ export function PromptLibrary() {
   }
   const closeEditor = () => {
     setEditingId(null)
-    window.requestAnimationFrame(() => editorTriggerRef.current?.focus())
+    editorTriggerRef.current?.focus()
   }
 
   useEffect(() => {
