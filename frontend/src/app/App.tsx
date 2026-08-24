@@ -1,8 +1,10 @@
+import { useEffect } from 'react'
 import { Aperture, Settings2 } from 'lucide-react'
 
 import { IconButton } from '../components/IconButton'
-import { CanvasWorkspace } from '../features/canvas/CanvasWorkspace'
-import { InspectorPanel } from '../features/inspector/InspectorPanel'
+import { CanvasBoard } from '../features/canvas/CanvasBoard'
+import { releaseAllObjectUrls } from '../features/canvas/store/canvasStore'
+import { ImageInspector } from '../features/inspector/ImageInspector'
 import { ProjectList } from '../features/projects/ProjectList'
 import { PromptLibrary } from '../features/prompts/PromptLibrary'
 import { useBackendHealth } from '../lib/useBackendHealth'
@@ -11,6 +13,12 @@ import { useAppStore } from './store'
 
 export default function App() {
   const isLeftPanelOpen = useAppStore((state) => state.isLeftPanelOpen)
+  useEffect(() => {
+    const releaseUploads = () => releaseAllObjectUrls()
+    window.addEventListener('pagehide', releaseUploads)
+    return () => window.removeEventListener('pagehide', releaseUploads)
+  }, [])
+
   const isRightPanelOpen = useAppStore((state) => state.isRightPanelOpen)
   const backendStatus = useBackendHealth()
 
@@ -40,9 +48,9 @@ export default function App() {
         </nav>
       )}
 
-      <CanvasWorkspace backendStatus={backendStatus} />
+      <CanvasBoard backendStatus={backendStatus} />
 
-      {isRightPanelOpen && <InspectorPanel />}
+      {isRightPanelOpen && <ImageInspector />}
     </div>
   )
 }

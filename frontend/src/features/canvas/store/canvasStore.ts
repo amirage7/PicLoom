@@ -8,7 +8,7 @@ import {
 } from '@xyflow/react'
 import { create } from 'zustand'
 
-import type { CanvasNode, CanvasTool, ProjectCanvasState } from '../../../types/domain'
+import type { CanvasImage, CanvasNode, CanvasTool, ProjectCanvasState } from '../../../types/domain'
 import { validateImageFiles } from '../model/files'
 import { createInitialCanvases } from './fixtures'
 
@@ -77,6 +77,7 @@ interface CanvasStore {
   addUploadedImages: (projectId: string, files: readonly File[], position: XYPosition) => string[]
   duplicateNode: (projectId: string, nodeId: string) => string | null
   deleteNode: (projectId: string, nodeId: string) => void
+  updateImage: (projectId: string, nodeId: string, changes: Partial<Pick<CanvasImage, 'prompt' | 'tags'>>) => void
   reset: () => void
 }
 
@@ -176,6 +177,25 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
     return createdNodes.map((node) => node.id)
   },
+  updateImage: (projectId, nodeId, changes) => set((state) => ({
+    canvases: updateCanvas(state.canvases, projectId, (canvas) => ({
+      ...canvas,
+      nodes: canvas.nodes.map((node) => node.id === nodeId ? {
+        ...node,
+        data: {
+          ...node.data,
+          image: {
+            ...node.data.image,
+            ...changes,
+            tags: changes.tags
+              ? [...new Set(changes.tags.map((tag) => tag.trim()).filter(Boolean))]
+              : node.data.image.tags,
+          },
+        },
+      } : node),
+    })),
+    error: null,
+  })),
   duplicateNode: (projectId, nodeId) => {
     const source = get().canvases[projectId]?.nodes.find((node) => node.id === nodeId)
     if (!source) return null
