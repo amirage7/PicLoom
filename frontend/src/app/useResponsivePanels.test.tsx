@@ -98,4 +98,15 @@ describe('useResponsivePanels', () => {
     expect(screen.getByLabelText('导航')).toHaveTextContent('closed')
     expect(screen.getByLabelText('详情')).toHaveTextContent('closed')
   })
+
+  it('starts compact layout on the canvas when both desktop panels were open', async () => {
+    mockCompact(true)
+    useAppStore.setState({ isLeftPanelOpen: true, isRightPanelOpen: true })
+    render(<Harness />)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('导航')).toHaveTextContent('closed')
+      expect(screen.getByLabelText('详情')).toHaveTextContent('closed')
+    })
+  })
 })

@@ -21,6 +21,12 @@ export function useResponsivePanels() {
     return () => media.removeEventListener('change', update)
   }, [])
 
+  useEffect(() => {
+    if (!isCompact || !isLeftOpen || !isRightOpen) return
+    setLeftOpen(false)
+    setRightOpen(false)
+  }, [isCompact, isLeftOpen, isRightOpen, setLeftOpen, setRightOpen])
+
   const remember = (trigger?: HTMLElement | null) => {
     if (trigger) lastTrigger.current = trigger
   }
