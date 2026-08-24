@@ -32,7 +32,13 @@ import type { BackendStatus } from '../../lib/useBackendHealth'
 import { ImageNode } from './components/ImageNode'
 import { useCanvasStore } from './store/canvasStore'
 
-interface CanvasBoardProps { backendStatus: BackendStatus }
+interface CanvasBoardProps {
+  backendStatus: BackendStatus
+  isLeftPanelOpen: boolean
+  isRightPanelOpen: boolean
+  onToggleLeft: (trigger: HTMLButtonElement) => void
+  onToggleRight: (trigger: HTMLButtonElement) => void
+}
 
 const nodeTypes: NodeTypes = { image: ImageNode }
 const statusText: Record<BackendStatus, string> = {
@@ -171,11 +177,9 @@ function Board({ projectId }: { projectId: string }) {
   )
 }
 
-export function CanvasBoard({ backendStatus }: CanvasBoardProps) {
+export function CanvasBoard({ backendStatus, isLeftPanelOpen, isRightPanelOpen, onToggleLeft, onToggleRight }: CanvasBoardProps) {
   const projects = useAppStore((state) => state.projects)
   const activeProjectId = useAppStore((state) => state.activeProjectId)
-  const toggleLeftPanel = useAppStore((state) => state.toggleLeftPanel)
-  const toggleRightPanel = useAppStore((state) => state.toggleRightPanel)
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0]
   const hydrateResources = useAppStore((state) => state.hydrateResources)
   const loadCanvas = useCanvasStore((state) => state.loadCanvas)
@@ -184,7 +188,7 @@ export function CanvasBoard({ backendStatus }: CanvasBoardProps) {
     <main className="canvas-workspace">
       <header className="canvas-header">
         <div className="canvas-title-group">
-          <IconButton label="切换左侧栏" onClick={toggleLeftPanel}><PanelLeftClose size={16} /></IconButton>
+          <IconButton label="切换左侧栏" aria-controls="workspace-navigation" aria-expanded={isLeftPanelOpen} onClick={(event) => onToggleLeft(event.currentTarget)}><PanelLeftClose size={16} /></IconButton>
           <span className="breadcrumb">项目</span><span className="breadcrumb-separator">/</span>
           <h1>{activeProject.name}</h1><ChevronDown size={14} aria-hidden="true" />
         </div>
@@ -193,7 +197,7 @@ export function CanvasBoard({ backendStatus }: CanvasBoardProps) {
           <SaveStatus onRetry={() => void hydrateResources().then(() => loadCanvas(activeProject.id)).catch(() => undefined)} />
           <IconButton label="搜索将在后续阶段开放" disabled><Search size={16} /></IconButton>
           <IconButton label="帮助：拖动空白区域平移，滚轮缩放"><CircleHelp size={16} /></IconButton>
-          <IconButton label="切换详情栏" onClick={toggleRightPanel}><PanelRightClose size={16} /></IconButton>
+          <IconButton label="切换详情栏" aria-controls="image-inspector" aria-expanded={isRightPanelOpen} onClick={(event) => onToggleRight(event.currentTarget)}><PanelRightClose size={16} /></IconButton>
         </div>
       </header>
       <ReactFlowProvider key={activeProjectId}><Board projectId={activeProjectId} /></ReactFlowProvider>

@@ -37,6 +37,22 @@ export function useResponsivePanels() {
     setRightOpen(true)
   }
 
+  const toggleLeft = (trigger?: HTMLElement | null) => {
+    if (isLeftOpen) {
+      setLeftOpen(false)
+      return
+    }
+    openLeft(trigger)
+  }
+
+  const toggleRight = (trigger?: HTMLElement | null) => {
+    if (isRightOpen) {
+      setRightOpen(false)
+      return
+    }
+    openRight(trigger)
+  }
+
   const closePanels = (restoreFocus = true) => {
     if (isCompact) {
       setLeftOpen(false)
@@ -58,5 +74,5 @@ export function useResponsivePanels() {
     return () => window.removeEventListener('keydown', closeOnEscape)
   })
 
-  return { isCompact, isLeftOpen, isRightOpen, openLeft, openRight, closePanels }
+  return { isCompact, isLeftOpen, isRightOpen, openLeft, openRight, toggleLeft, toggleRight, closePanels }
 }

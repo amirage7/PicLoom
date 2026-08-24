@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Aperture, Settings2 } from 'lucide-react'
+import { Aperture, Settings2, X } from 'lucide-react'
 
 import { IconButton } from '../components/IconButton'
 import { CanvasBoard } from '../features/canvas/CanvasBoard'
@@ -9,10 +9,11 @@ import { ProjectList } from '../features/projects/ProjectListPersisted'
 import { PromptLibrary } from '../features/prompts/PromptLibraryPersisted'
 import { useBackendHealth } from '../lib/useBackendHealth'
 import { useAppStore } from './store'
+import { useResponsivePanels } from './useResponsivePanels'
 
 
 export default function App() {
-  const isLeftPanelOpen = useAppStore((state) => state.isLeftPanelOpen)
+  const panels = useResponsivePanels()
   const hydrateResources = useAppStore((state) => state.hydrateResources)
   useEffect(() => {
     const releaseUploads = () => releaseAllObjectUrls()
@@ -20,7 +21,6 @@ export default function App() {
     return () => window.removeEventListener('pagehide', releaseUploads)
   }, [])
 
-  const isRightPanelOpen = useAppStore((state) => state.isRightPanelOpen)
   const backendStatus = useBackendHealth()
   useEffect(() => {
     if (backendStatus === 'online') void hydrateResources().catch(() => undefined)
@@ -30,11 +30,12 @@ export default function App() {
   return (
     <div
       className="app-shell"
-      data-left-open={isLeftPanelOpen}
-      data-right-open={isRightPanelOpen}
+      data-left-open={panels.isLeftOpen}
+      data-right-open={panels.isRightOpen}
+      data-compact={panels.isCompact}
     >
-      {isLeftPanelOpen && (
-        <nav className="left-sidebar" aria-label="工作区导航">
+      {panels.isLeftOpen && (
+        <nav id="workspace-navigation" className="left-sidebar" aria-label="工作区导航">
           <header className="brand-header">
             <div className="brand-mark"><Aperture size={18} strokeWidth={1.8} /></div>
             <div className="brand-type">
@@ -42,6 +43,7 @@ export default function App() {
               <span>Local workspace</span>
             </div>
             <IconButton label="设置将在后续阶段开放" disabled><Settings2 size={15} /></IconButton>
+            <IconButton className="compact-panel-close" label="关闭导航" onClick={() => panels.closePanels()}><X size={15} /></IconButton>
           </header>
           <ProjectList />
           <PromptLibrary />
@@ -53,9 +55,16 @@ export default function App() {
         </nav>
       )}
 
-      <CanvasBoard backendStatus={backendStatus} />
+      <CanvasBoard
+        backendStatus={backendStatus}
+        isLeftPanelOpen={panels.isLeftOpen}
+        isRightPanelOpen={panels.isRightOpen}
+        onToggleLeft={(trigger) => panels.toggleLeft(trigger)}
+        onToggleRight={(trigger) => panels.toggleRight(trigger)}
+      />
 
-      {isRightPanelOpen && <ImageInspector />}
+      {panels.isCompact && (panels.isLeftOpen || panels.isRightOpen) && <button type="button" className="panel-backdrop" aria-label="关闭侧栏" onClick={() => panels.closePanels()} />}
+      {panels.isRightOpen && <ImageInspector id="image-inspector" onClose={() => panels.closePanels()} />}
     </div>
   )
 }
