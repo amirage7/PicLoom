@@ -20,6 +20,7 @@ import {
   PanelRightClose,
   Plus,
   Search,
+  Sparkles,
   Upload,
   X,
 } from 'lucide-react'
@@ -29,6 +30,8 @@ import { SaveStatus } from '../../components/SaveStatus'
 import { useAppStore } from '../../app/store'
 import { IconButton } from '../../components/IconButton'
 import type { BackendStatus } from '../../lib/useBackendHealth'
+import { GenerationPanel } from '../generation/GenerationPanel'
+import { useGenerationStore } from '../generation/generationStore'
 import { ImageNode } from './components/ImageNode'
 import { useCanvasStore } from './store/canvasStore'
 import { useCanvasShortcuts } from './useCanvasShortcuts'
@@ -63,6 +66,8 @@ function Board({ projectId, shortcutsEnabled }: { projectId: string; shortcutsEn
   const persistPosition = useCanvasStore((state) => state.persistPosition)
   const persistConnection = useCanvasStore((state) => state.persistConnection)
   const deletePersistedNode = useCanvasStore((state) => state.deletePersistedNode)
+  const isGenerationPanelOpen = useGenerationStore((state) => state.isPanelOpen)
+  const setGenerationPanelOpen = useGenerationStore((state) => state.setPanelOpen)
   const { fitView, screenToFlowPosition, zoomIn, zoomOut, zoomTo } = useReactFlow()
   const { zoom } = useViewport()
   useCanvasShortcuts({
@@ -151,9 +156,12 @@ function Board({ projectId, shortcutsEnabled }: { projectId: string; shortcutsEn
         <IconButton label="抓手工具 (H)" isActive={activeTool === 'pan'} onClick={() => setTool('pan')}><Hand size={16} /></IconButton>
         <span className="toolbar-divider" />
         <IconButton label="添加图片" onClick={() => inputRef.current?.click()}><ImagePlus size={16} /></IconButton>
+        <IconButton label="使用 ChatGPT 生成图片" isActive={isGenerationPanelOpen} onClick={() => setGenerationPanelOpen(!isGenerationPanelOpen)}><Sparkles size={16} /></IconButton>
         <IconButton label="连接图片：拖动节点两侧圆点" onClick={() => setTool('select')}><Link2 size={16} /></IconButton>
         <input ref={inputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={onInput} />
       </div>
+
+      {isGenerationPanelOpen && <GenerationPanel projectId={projectId} onCompleted={(imageId) => void loadCanvas(projectId).then(() => selectNode(projectId, imageId))} />}
 
       {canvas.nodes.length === 0 && (
         <button className="canvas-empty-state canvas-drop-target" type="button" onClick={() => inputRef.current?.click()}>
