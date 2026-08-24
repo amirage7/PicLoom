@@ -13,24 +13,41 @@ if (-not (Test-Path $pythonPath)) {
     throw 'Backend virtual environment is missing. Create backend/.venv and install requirements.'
 }
 
-$backend = Start-Process -FilePath $pythonPath -WorkingDirectory $backendRoot -ArgumentList @(
-    '-m', 'uvicorn', 'app.main:app', '--reload', '--host', '127.0.0.1', '--port', '8000'
-) -PassThru -WindowStyle Hidden
+$backendJob = Start-Job -Name 'ai-image-canvas-backend' -ArgumentList $pythonPath, $backendRoot -ScriptBlock {
+    param($pythonExecutable, $workingDirectory)
+    Set-Location -LiteralPath $workingDirectory
+    & $pythonExecutable -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+}
 
-$frontend = Start-Process -FilePath 'npm.cmd' -WorkingDirectory $frontendRoot -ArgumentList @(
-    'run', 'dev', '--', '--host', '127.0.0.1', '--port', '3000'
-) -PassThru -WindowStyle Hidden
+$frontendJob = Start-Job -Name 'ai-image-canvas-frontend' -ArgumentList $frontendRoot -ScriptBlock {
+    param($workingDirectory)
+    Set-Location -LiteralPath $workingDirectory
+    & npm.cmd run dev -- --host 127.0.0.1 --port 3000
+}
+
+$jobs = @($backendJob, $frontendJob)
 
 Write-Host 'AI Image Canvas is starting at http://127.0.0.1:3000'
 Write-Host 'Press Ctrl+C to stop both services.'
 
 try {
-    Wait-Process -Id $backend.Id, $frontend.Id
+    while (($jobs | Where-Object State -EQ 'Running').Count -eq $jobs.Count) {
+        Wait-Job -Job $jobs -Any -Timeout 1 | Out-Null
+    }
+
+    $stoppedJobs = $jobs | Where-Object State -NE 'Running'
+    if ($stoppedJobs) {
+        foreach ($job in $stoppedJobs) {
+            Receive-Job -Job $job | Write-Host
+        }
+        throw 'A development service stopped unexpectedly.'
+    }
 }
 finally {
-    foreach ($process in @($backend, $frontend)) {
-        if (-not $process.HasExited) {
-            Stop-Process -Id $process.Id
+    foreach ($job in $jobs) {
+        if ($job.State -eq 'Running') {
+            Stop-Job -Job $job
         }
     }
+    Remove-Job -Job $jobs -Force -ErrorAction SilentlyContinue
 }
