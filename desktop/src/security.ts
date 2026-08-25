@@ -29,6 +29,12 @@ function isHttpsHost(url: URL, hostname: string): boolean {
   return url.protocol === 'https:' && (url.hostname === hostname || url.hostname.endsWith(`.${hostname}`))
 }
 
+const LOGIN_IDENTITY_HOSTS = new Set([
+  'accounts.google.com',
+  'login.microsoftonline.com',
+  'appleid.apple.com',
+])
+
 export function isAllowedRendererUrl(value: string): boolean {
   const url = parseUrl(value)
   if (!url) return false
@@ -42,7 +48,10 @@ export function isAllowedRendererUrl(value: string): boolean {
 
 export function isAllowedLoginUrl(value: string): boolean {
   const url = parseUrl(value)
-  return url !== null && isHttpsHost(url, 'openai.com')
+  return url !== null && url.protocol === 'https:' && (
+    isHttpsHost(url, 'openai.com')
+    || LOGIN_IDENTITY_HOSTS.has(url.hostname)
+  )
 }
 
 export function isAllowedChatGptUrl(value: string): boolean {
@@ -81,6 +90,7 @@ export function installNavigationSecurity(
   })
   target.setWindowOpenHandler(({ url }) => {
     const parsed = parseUrl(url)
+    if (parsed?.protocol === 'https:' && isAllowed(url)) return { action: 'allow' }
     if (parsed?.protocol === 'https:') void openExternal(url)
     return { action: 'deny' }
   })

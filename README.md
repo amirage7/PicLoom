@@ -2,6 +2,8 @@
 
 本地优先的 AI 图片创作管理工作台。已接入 React Flow 无限画布、SQLite、本地图片存储，以及桌面版内嵌的官方 ChatGPT 普通 Chat 页面；项目不调用 OpenAI API。
 
+完整安装、登录、生图、数据备份与故障排查说明见 [AI Image Canvas 软件说明书](docs/AI-Image-Canvas-软件说明书.md)。
+
 ## 环境要求
 
 - Node.js 20+

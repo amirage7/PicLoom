@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   installSessionSecurity,
+  installNavigationSecurity,
   isAllowedChatGptUrl,
   isAllowedLoginUrl,
   isAllowedRendererUrl,
@@ -31,6 +32,9 @@ describe('desktop URL policy', () => {
     'https://chatgpt.com/c/abc',
     'https://auth.openai.com/authorize',
     'https://accounts.openai.com/login',
+    'https://accounts.google.com/o/oauth2/v2/auth',
+    'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+    'https://appleid.apple.com/auth/authorize',
   ])('allows ChatGPT navigation URL %s', (url) => {
     expect(isAllowedChatGptUrl(url)).toBe(true)
   })
@@ -51,6 +55,39 @@ describe('desktop URL policy', () => {
     expect(isAllowedLoginUrl('http://auth.openai.com/')).toBe(false)
   })
 })
+
+  it('keeps trusted ChatGPT authentication popups inside the persistent app session', () => {
+    let windowHandler: ((details: { url: string }) => { action: 'allow' | 'deny' }) | undefined
+    const openExternal = vi.fn(async () => undefined)
+    const target = {
+      on() {},
+      setWindowOpenHandler(handler: typeof windowHandler) {
+        windowHandler = handler
+      },
+    }
+
+    installNavigationSecurity(target, isAllowedChatGptUrl, openExternal)
+
+    expect(windowHandler?.({ url: 'https://auth.openai.com/authorize' })).toEqual({ action: 'allow' })
+    expect(windowHandler?.({ url: 'https://accounts.google.com/o/oauth2/v2/auth' })).toEqual({ action: 'allow' })
+    expect(openExternal).not.toHaveBeenCalled()
+  })
+
+  it('still sends unrelated HTTPS popups to the system browser', () => {
+    let windowHandler: ((details: { url: string }) => { action: 'allow' | 'deny' }) | undefined
+    const openExternal = vi.fn(async () => undefined)
+    const target = {
+      on() {},
+      setWindowOpenHandler(handler: typeof windowHandler) {
+        windowHandler = handler
+      },
+    }
+
+    installNavigationSecurity(target, isAllowedChatGptUrl, openExternal)
+
+    expect(windowHandler?.({ url: 'https://example.com/help' })).toEqual({ action: 'deny' })
+    expect(openExternal).toHaveBeenCalledWith('https://example.com/help')
+  })
 
 describe('session security', () => {
   it('denies permissions and unexpected downloads by default', () => {
