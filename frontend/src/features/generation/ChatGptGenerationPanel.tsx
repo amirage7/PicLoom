@@ -1,9 +1,18 @@
 import { Eye, EyeOff, RefreshCw, RotateCcw, Send, Square } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 
-import { getDesktopBridge } from '../desktop/desktopBridge'
 import { useCanvasStore } from '../canvas/store/canvasStore'
+import { getDesktopBridge } from '../desktop/desktopBridge'
+import { ImageMentionMenu } from './ImageMentionMenu'
 import { createGenerationTask } from './generationApi'
+import {
+  filterMentionCandidates,
+  findActiveMention,
+  findInvalidMentions,
+  insertMention,
+  resolveImageMentions,
+  type MentionImage,
+} from './imageMentions'
 
 interface ChatGptGenerationPanelProps {
   projectId: string
@@ -12,16 +21,31 @@ interface ChatGptGenerationPanelProps {
 export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProps) {
   const bridge = getDesktopBridge()
   const viewSlotRef = useRef<HTMLDivElement>(null)
+  const promptRef = useRef<HTMLTextAreaElement>(null)
   const taskIdRef = useRef<string | null>(null)
   const canvas = useCanvasStore((state) => state.canvases[projectId])
   const [prompt, setPrompt] = useState('')
-  const [referenceImageId, setReferenceImageId] = useState('')
+  const [caret, setCaret] = useState(0)
+  const [mentionIndex, setMentionIndex] = useState(0)
   const [viewVisible, setViewVisible] = useState(false)
   const [pending, setPending] = useState(false)
   const [taskId, setTaskId] = useState<string | null>(null)
   const [recoverable, setRecoverable] = useState(false)
   const [message, setMessage] = useState('登录后，可在这里直接使用普通 Chat 生成图片。')
   const [error, setError] = useState<string | null>(null)
+
+  const mentionImages: MentionImage[] = (canvas?.nodes ?? []).map((node) => ({
+    imageId: node.id,
+    name: node.data.image.name,
+    imageUrl: node.data.image.imageUrl,
+  }))
+  const activeMention = findActiveMention(prompt, caret)
+  const mentionCandidates = activeMention
+    ? filterMentionCandidates(mentionImages, activeMention.query)
+    : []
+  const resolvedReferences = resolveImageMentions(prompt, mentionImages)
+
+  useEffect(() => setMentionIndex(0), [activeMention?.query, mentionCandidates.length])
 
   const reportViewBounds = useCallback(() => {
     const slot = viewSlotRef.current
@@ -81,23 +105,60 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
     })
   }, [bridge])
 
+  const selectMention = (image: MentionImage) => {
+    if (!activeMention) return
+    const next = insertMention(prompt, activeMention, image.name)
+    setPrompt(next.prompt)
+    setCaret(next.caret)
+    setMentionIndex(0)
+    window.setTimeout(() => {
+      promptRef.current?.focus()
+      promptRef.current?.setSelectionRange(next.caret, next.caret)
+    }, 0)
+  }
+
+  const handlePromptKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!activeMention || mentionCandidates.length === 0) return
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setMentionIndex((index) => (index + 1) % mentionCandidates.length)
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setMentionIndex((index) => (index - 1 + mentionCandidates.length) % mentionCandidates.length)
+    } else if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault()
+      selectMention(mentionCandidates[Math.min(mentionIndex, mentionCandidates.length - 1)])
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      setCaret(-1)
+    }
+  }
+
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (!bridge || !prompt.trim() || pending) return
+    const compactPrompt = prompt.trim()
+    if (!bridge || !compactPrompt || pending) return
+    const invalidMentions = findInvalidMentions(compactPrompt, mentionImages)
+    if (invalidMentions.length > 0) {
+      setError(`找不到引用图片：@${invalidMentions.join('、@')}。请重新输入 @ 选择图片。`)
+      return
+    }
+    const references = resolveImageMentions(compactPrompt, mentionImages)
     setPending(true)
     setError(null)
     setMessage('正在把 Prompt 发送到 ChatGPT…')
     try {
-      const parentImageId = referenceImageId || undefined
-      const task = await createGenerationTask(projectId, prompt.trim(), parentImageId)
+      const parentImageId = references[0]?.imageId
+      const task = await createGenerationTask(projectId, compactPrompt, parentImageId)
       const nextTaskId = task.id
       taskIdRef.current = nextTaskId
       setTaskId(nextTaskId)
       await bridge.startGeneration({
         taskId: nextTaskId,
         projectId,
-        prompt: prompt.trim(),
+        prompt: compactPrompt,
         parentImageId: parentImageId ?? null,
+        referenceImages: references,
       })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '暂时无法启动生成任务')
@@ -126,7 +187,6 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
     <div className="desktop-generation-content">
       <section className="desktop-generation-intro">
         <h2>ChatGPT 生图</h2>
-
         <p>普通 Chat · 独立登录会话</p>
       </section>
 
@@ -150,23 +210,42 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
       )}
 
       <form className="desktop-generation-form" onSubmit={submit}>
-        <label htmlFor="desktop-reference-image">参考图片（可选）</label>
-        <select id="desktop-reference-image" aria-label="参考图片" value={referenceImageId} onChange={(event) => setReferenceImageId(event.target.value)}>
-          <option value="">不使用参考图</option>
-          {canvas?.nodes.map((node) => <option key={node.id} value={node.id}>{node.data.image.fileName}</option>)}
-        </select>
-        {referenceImageId && canvas && (() => {
-          const image = canvas.nodes.find((node) => node.id === referenceImageId)?.data.image
-          return image ? <div className="desktop-reference-preview"><img src={image.imageUrl} alt="参考图预览" /><span>{image.fileName}<small>将上传到 ChatGPT，并作为父版本</small></span><button type="button" onClick={() => setReferenceImageId('')}>移除</button></div> : null
-        })()}
         <label htmlFor="desktop-generation-prompt">Prompt</label>
-        <textarea
-          id="desktop-generation-prompt"
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-          placeholder="描述你想生成的图片…"
-          rows={7}
-        />
+        <div className="desktop-prompt-editor">
+          <textarea
+            ref={promptRef}
+            id="desktop-generation-prompt"
+            value={prompt}
+            onChange={(event) => {
+              setPrompt(event.target.value)
+              setCaret(event.target.selectionStart ?? event.target.value.length)
+              setError(null)
+            }}
+            onClick={(event) => setCaret(event.currentTarget.selectionStart ?? prompt.length)}
+            onKeyUp={(event) => {
+              if (!['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(event.key)) {
+                setCaret(event.currentTarget.selectionStart ?? prompt.length)
+              }
+            }}
+            onKeyDown={handlePromptKeyDown}
+            placeholder="描述你想生成的图片；输入 @ 引用画布图片…"
+            rows={7}
+          />
+          {activeMention && mentionCandidates.length > 0 && (
+            <ImageMentionMenu
+              images={mentionCandidates}
+              activeIndex={Math.min(mentionIndex, mentionCandidates.length - 1)}
+              onSelect={selectMention}
+            />
+          )}
+        </div>
+        <p className="desktop-mention-help">输入 @ 后选择图片，可在同一 Prompt 中引用多张。</p>
+        {resolvedReferences.length > 0 && (
+          <div className="desktop-mention-summary" aria-label={`将引用 ${resolvedReferences.length} 张图片`}>
+            <span>将引用 {resolvedReferences.length} 张图片</span>
+            <div>{resolvedReferences.map((reference) => <small key={reference.imageId}>@{reference.name}</small>)}</div>
+          </div>
+        )}
         <button className="desktop-generation-submit" type="submit" disabled={!bridge || pending || !prompt.trim()}>
           <Send size={15} />{pending ? '正在启动…' : '使用 ChatGPT 生成'}
         </button>

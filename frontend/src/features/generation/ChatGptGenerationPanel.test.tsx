@@ -77,19 +77,41 @@ describe('ChatGptGenerationPanel', () => {
     expect(bridge.reloadChatGpt).toHaveBeenCalledOnce()
   })
 
-  it('uses a project image as an actual generation reference and parent version', async () => {
+  it('opens an image picker after @ and inserts the selected image name', async () => {
+    const user = userEvent.setup()
+    installBridge()
+    useCanvasStore.getState().updateImage('future-city', 'street-level', { name: '喜羊羊' })
+    render(<ChatGptGenerationPanel projectId="future-city" />)
+
+    const prompt = screen.getByRole('textbox', { name: 'Prompt' })
+    await user.type(prompt, '@喜')
+
+    expect(screen.getByRole('listbox', { name: '选择引用图片' })).toBeInTheDocument()
+    await user.keyboard('{ArrowDown}{Enter}')
+    expect(prompt).toHaveValue('@喜羊羊')
+  })
+
+  it('submits all mentioned images in text order and uses the first as parent', async () => {
     const user = userEvent.setup()
     const bridge = installBridge()
-    useCanvasStore.getState().selectNode('future-city', 'city-overview')
+    useCanvasStore.getState().updateImage('future-city', 'city-overview', { name: '假面骑士build' })
+    useCanvasStore.getState().updateImage('future-city', 'street-level', { name: '喜羊羊' })
     render(<ChatGptGenerationPanel projectId="future-city" />)
-    await user.selectOptions(screen.getByRole('combobox', { name: '参考图片' }), 'city-overview')
-    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), '基于参考图修改光线')
+
+    expect(screen.queryByRole('combobox', { name: '参考图片' })).not.toBeInTheDocument()
+    const prompt = '将@假面骑士build的身体和@喜羊羊的头部合成一个新的角色'
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), prompt)
     await user.click(screen.getByRole('button', { name: '使用 ChatGPT 生成' }))
+
     await waitFor(() => expect(api.createGenerationTask).toHaveBeenCalledWith(
-      'future-city', '基于参考图修改光线', 'city-overview',
+      'future-city', prompt, 'city-overview',
     ))
     expect(bridge.startGeneration).toHaveBeenCalledWith(expect.objectContaining({
       parentImageId: 'city-overview',
+      referenceImages: [
+        { imageId: 'city-overview', name: '假面骑士build' },
+        { imageId: 'street-level', name: '喜羊羊' },
+      ],
     }))
   })
 })

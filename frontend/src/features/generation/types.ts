@@ -11,7 +11,8 @@ export interface ProviderCapabilities {
 }
 
 export interface ProviderAvailability { paired: boolean; online: boolean; state: string; chatUrl: string | null; extensionVersion: string | null }
-export interface GenerateImageInput { projectId: string; prompt: string; parentImageId?: string }
+export interface GenerateImageReference { imageId: string; name: string }
+export interface GenerateImageInput { projectId: string; prompt: string; parentImageId?: string; referenceImages?: GenerateImageReference[] }
 export interface ImageGenerationTask { id: string; projectId: string; prompt: string; status: GenerationStatus; progressMessage: string; chatUrl: string | null; imageId: string | null; imageIds: string[]; errorCode: string | null; recoverable: boolean }
 
 export interface ImageProvider {

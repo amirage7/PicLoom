@@ -61,12 +61,17 @@ export class ChatGptDesktopProvider implements ImageProvider {
   }
 
   async generate(input: GenerateImageInput): Promise<ImageGenerationTask> {
-    const task = await api.createGenerationTask(input.projectId, input.prompt, input.parentImageId)
+    const referenceImages = input.referenceImages ?? (input.parentImageId
+      ? [{ imageId: input.parentImageId, name: '参考图片' }]
+      : [])
+    const parentImageId = referenceImages[0]?.imageId ?? input.parentImageId
+    const task = await api.createGenerationTask(input.projectId, input.prompt, parentImageId)
     await this.bridge.startGeneration({
       taskId: task.id,
       projectId: task.project_id,
       prompt: task.prompt,
       parentImageId: task.parent_image_id,
+      referenceImages,
     })
     return desktopTask(await api.getGenerationTask(task.id))
   }

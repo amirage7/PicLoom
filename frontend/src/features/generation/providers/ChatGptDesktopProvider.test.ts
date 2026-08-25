@@ -37,6 +37,7 @@ describe('ChatGPT desktop provider', () => {
 
     expect(desktopBridge.startGeneration).toHaveBeenCalledWith({
       taskId: 'task-1', projectId: 'project-1', prompt: '一朵花', parentImageId: null,
+      referenceImages: [],
     })
     expect(provider.capabilities.multipleImages).toBe(true)
   })

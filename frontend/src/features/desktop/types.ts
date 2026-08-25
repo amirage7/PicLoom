@@ -4,11 +4,17 @@ export type DesktopGenerationState =
   | 'completed' | 'refused' | 'rate_limited' | 'page_changed'
   | 'failed' | 'cancelled'
 
+export interface DesktopReferenceImage {
+  imageId: string
+  name: string
+}
+
 export interface DesktopGenerationRequest {
   taskId: string
   projectId: string
   prompt: string
   parentImageId: string | null
+  referenceImages: DesktopReferenceImage[]
 }
 
 export interface DesktopGenerationEvent {
