@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.entities import Base
@@ -12,6 +12,11 @@ class GenerationTask(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=False)
     provider: Mapped[str] = mapped_column(String(64), nullable=False, default="chatgpt-web")
+    provider_mode: Mapped[str] = mapped_column(String(24), nullable=False, default="extension", server_default="extension")
+    batch_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    image_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    last_page_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     parent_image_id: Mapped[str | None] = mapped_column(ForeignKey("images.id", ondelete="SET NULL"), nullable=True)
     status: Mapped[str] = mapped_column(String(24), nullable=False, index=True)

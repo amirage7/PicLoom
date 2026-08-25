@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import build_session_factory
 from app.models.entities import Base, Project, Prompt
+from app.models.generation import GenerationTask  # noqa: F401
+from app.services.database_migrations import run_additive_migrations
 
 
 PROJECT_SEEDS = (
@@ -33,5 +35,6 @@ def seed_database(session: Session) -> None:
 
 def init_database(engine: Engine) -> None:
     Base.metadata.create_all(engine)
+    run_additive_migrations(engine)
     with build_session_factory(engine)() as session:
         seed_database(session)
