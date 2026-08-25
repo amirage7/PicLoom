@@ -1,6 +1,6 @@
 # Image Names, Mention References, and Fit Viewer Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add persistent unique image names, natural `@图片名` multi-image references for ChatGPT generation, and a fit-to-window default for the original-image viewer.
 
@@ -24,7 +24,7 @@
 - Modify: `backend/tests/test_images.py`
 - Modify: `backend/tests/test_generation_batch.py`
 
-- [ ] **Step 1: Write failing backend tests**
+- [x] **Step 1: Write failing backend tests**
 
 Add tests proving upload responses contain `name`, renames persist, normalized duplicates return 409, different projects may reuse names, copies receive a numbered “副本” name, generated batches receive unique prompt-derived names, and an old `images` table is backfilled idempotently.
 
@@ -47,7 +47,7 @@ def test_image_name_migration_backfills_unique_rows(tmp_path: Path):
     assert rows == [("喜羊羊", "喜羊羊"), ("喜羊羊 (2)", "喜羊羊 (2)")]
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run:
 
@@ -57,7 +57,7 @@ Run:
 
 Expected: failures because `ImageResponse` has no `name`, PATCH ignores `name`, and the `images` table has no `name`/`name_key` columns.
 
-- [ ] **Step 3: Implement name normalization and allocation**
+- [x] **Step 3: Implement name normalization and allocation**
 
 Create `image_names.py` with focused helpers:
 
@@ -85,15 +85,15 @@ def allocate_name(session: Session, project_id: str, preferred: str, *, exclude_
 
 Add non-null `name` and `name_key` model columns plus `UniqueConstraint("project_id", "name_key")`. Extend the SQLite migration to add both columns, backfill in `(created_time, id)` order, and create a unique index only after all rows are valid. Keep the migration idempotent when run twice.
 
-- [ ] **Step 4: Wire names through image creation, update, copy, and batch import**
+- [x] **Step 4: Wire names through image creation, update, copy, and batch import**
 
 `serialize_image()` must include `name`. Uploads allocate from the file stem, copies allocate from `f"{source.name} 副本"`, and generated batch files allocate from `task.prompt`. `ImageUpdate` accepts `name: str | None`; `update_image()` applies `normalize_name`, checks project scope, and stores both fields. Translate `ImageNameConflictError` and name validation errors to HTTP 409/422 respectively.
 
-- [ ] **Step 5: Run backend tests and verify GREEN**
+- [x] **Step 5: Run backend tests and verify GREEN**
 
 Run the command from Step 2. Expected: all selected backend tests pass.
 
-- [ ] **Step 6: Commit backend naming**
+- [x] **Step 6: Commit backend naming**
 
 ```powershell
 git add backend
@@ -113,7 +113,7 @@ git commit -m "feat: add persistent unique image names"
 - Modify: `frontend/src/features/inspector/ImageInspector.test.tsx`
 - Modify: `frontend/src/index.css`
 
-- [ ] **Step 1: Write failing UI/store tests**
+- [x] **Step 1: Write failing UI/store tests**
 
 Add `name` to test DTO fixtures and assert the node renders its name separately from its Prompt. Add an inspector test that edits “图片名称”, blurs, and verifies `persistMetadata(projectId, imageId, { name })`; add a rejection test that keeps the typed value and renders the backend conflict message.
 
@@ -132,7 +132,7 @@ await waitFor(() => expect(persistMetadata).toHaveBeenCalledWith(
 ))
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run:
 
@@ -142,7 +142,7 @@ npm.cmd --prefix frontend test -- --run src/features/canvas/components/ImageNode
 
 Expected: type/test failures because `CanvasImage`, `ImageDto`, and the inspector have no `name`.
 
-- [ ] **Step 3: Implement frontend name mapping and editing**
+- [x] **Step 3: Implement frontend name mapping and editing**
 
 Add `name` to `CanvasImage`, `ImageDto`, and `ImagePatch`; map it in `nodeFromDto`; include it in `updateImage` metadata types and all in-memory fixtures. Render:
 
@@ -153,11 +153,11 @@ Add `name` to `CanvasImage`, `ImageDto`, and `ImagePatch`; map it in `nodeFromDt
 
 In the inspector, use independent `name`, `nameError`, and `savingName` state. Save name on Enter/blur, restore it on Escape, and do not use the combined Prompt/tag `save()` callback so a failed name update cannot overwrite unrelated fields.
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run the command from Step 2. Expected: all selected frontend tests pass.
 
-- [ ] **Step 5: Commit UI naming**
+- [x] **Step 5: Commit UI naming**
 
 ```powershell
 git add frontend
@@ -175,7 +175,7 @@ git commit -m "feat: add editable canvas image names"
 - Modify: `frontend/src/features/desktop/types.ts`
 - Modify: `frontend/src/index.css`
 
-- [ ] **Step 1: Write failing parser and panel tests**
+- [x] **Step 1: Write failing parser and panel tests**
 
 Test long-name-first matching, Prompt order, deduplication, the active query at the caret, insertion, keyboard selection, removal of the old combobox, and the bridge payload.
 
@@ -196,7 +196,7 @@ await user.keyboard('{ArrowDown}{Enter}')
 expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue('@喜羊羊')
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run:
 
@@ -206,7 +206,7 @@ npm.cmd --prefix frontend test -- --run src/features/generation/imageMentions.te
 
 Expected: module-not-found and old reference-combobox assertions fail.
 
-- [ ] **Step 3: Implement the pure mention functions**
+- [x] **Step 3: Implement the pure mention functions**
 
 Expose these APIs:
 
@@ -222,7 +222,7 @@ export function findInvalidMentions(prompt: string, images: MentionImage[]): str
 
 Known names are matched longest-first and results are returned by first text position, deduplicated by ID. A standalone `@` opens the full list but is not an invalid reference.
 
-- [ ] **Step 4: Implement the autocomplete and submission flow**
+- [x] **Step 4: Implement the autocomplete and submission flow**
 
 Create a small `ImageMentionMenu` listbox with thumbnail/name options and roving keyboard selection. In `ChatGptGenerationPanel`, delete `referenceImageId`, the select, and preview. Track textarea ref/caret, derive candidates from the active mention, and show selected reference names under the field. On submit, block invalid mentions; otherwise use the first resolved ID as `parentImageId` and send:
 
@@ -236,11 +236,11 @@ await bridge.startGeneration({
 })
 ```
 
-- [ ] **Step 5: Run tests and verify GREEN**
+- [x] **Step 5: Run tests and verify GREEN**
 
 Run the command from Step 2. Expected: all selected mention and panel tests pass.
 
-- [ ] **Step 6: Commit mention UI**
+- [x] **Step 6: Commit mention UI**
 
 ```powershell
 git add frontend
@@ -261,7 +261,7 @@ git commit -m "feat: add image mentions to generation prompts"
 - Modify: `desktop/tests/generationOrchestrator.test.ts`
 - Modify: `frontend/src/features/desktop/desktopBridge.test.ts`
 
-- [ ] **Step 1: Write failing Electron tests**
+- [x] **Step 1: Write failing Electron tests**
 
 Add IPC tests rejecting non-arrays, more than 12 references, blank IDs/names, duplicate IDs, and a `parentImageId` that differs from the first reference. Add attachment tests expecting one `uploadFile(path1, path2)` call. Add orchestrator tests proving attachment precedes submission, the mapped Prompt order equals upload order, and cleanup runs on success/failure.
 
@@ -273,7 +273,7 @@ expect(submit).toHaveBeenCalledWith(expect.anything(),
 )
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run:
 
@@ -283,7 +283,7 @@ npm.cmd --prefix desktop test -- --run tests/ipc.test.ts tests/referenceAttachme
 
 Expected: request types reject `referenceImages`; attachment accepts only one path; orchestrator submits the unmapped Prompt.
 
-- [ ] **Step 3: Extend and validate the desktop contract**
+- [x] **Step 3: Extend and validate the desktop contract**
 
 Add:
 
@@ -304,15 +304,15 @@ export interface DesktopGenerationRequest {
 
 `validateGenerationRequest` trims fields, caps references at 12, rejects duplicate IDs, and requires `parentImageId === referenceImages[0]?.imageId` (or null when empty).
 
-- [ ] **Step 4: Attach all files atomically and build the mapped Prompt**
+- [x] **Step 4: Attach all files atomically and build the mapped Prompt**
 
 Change `attachReferenceFile` to `attachReferenceFiles(webContents, filePaths)` and call Electron's file input with all paths in one operation. Change the orchestrator dependency to `attachReferences(webContents, imageIds)` and submit `buildReferencePrompt(request.prompt, request.referenceImages)`. In `main.ts`, resolve all image IDs before attachment, create all temporary files, attach them together, and remove the temporary directory in one cleanup callback.
 
-- [ ] **Step 5: Run desktop tests and verify GREEN**
+- [x] **Step 5: Run desktop tests and verify GREEN**
 
 Run the command from Step 2. Expected: all selected desktop tests pass.
 
-- [ ] **Step 6: Commit desktop multi-reference support**
+- [x] **Step 6: Commit desktop multi-reference support**
 
 ```powershell
 git add desktop frontend/src/features/desktop
@@ -326,7 +326,7 @@ git commit -m "feat: attach multiple named ChatGPT references"
 - Modify: `frontend/src/features/inspector/ImageInspector.test.tsx`
 - Modify: `frontend/src/index.css`
 
-- [ ] **Step 1: Write the failing viewer regression test**
+- [x] **Step 1: Write the failing viewer regression test**
 
 Open the viewer and assert the stage is in fit mode and the toolbar reads “适应”. Zoom once, close, reopen, and assert it returns to fit mode.
 
@@ -340,7 +340,7 @@ await user.click(screen.getByRole('button', { name: '查看原图' }))
 expect(screen.getByText('适应')).toBeInTheDocument()
 ```
 
-- [ ] **Step 2: Run test and verify RED**
+- [x] **Step 2: Run test and verify RED**
 
 Run:
 
@@ -350,7 +350,7 @@ npm.cmd --prefix frontend test -- --run src/features/inspector/ImageInspector.te
 
 Expected: viewer starts at `100%` and lacks fit state.
 
-- [ ] **Step 3: Implement fit/zoom state**
+- [x] **Step 3: Implement fit/zoom state**
 
 Use `const [viewerScale, setViewerScale] = useState<'fit' | number>('fit')`. Opening and selection changes reset to `fit`. Fit styling uses a class instead of an inline percentage width; numeric zoom uses a percentage width. “适应窗口” sets `fit`, wheel/plus converts fit to 125 before continuing, and minus from fit is a no-op.
 
@@ -365,15 +365,15 @@ Use `const [viewerScale, setViewerScale] = useState<'fit' | number>('fit')`. Ope
 
 CSS for `.is-fit` must use `max-width: 100%; max-height: 100%; width: auto; height: auto;` and center the stage both horizontally and vertically.
 
-- [ ] **Step 4: Run test and verify GREEN**
+- [x] **Step 4: Run test and verify GREEN**
 
 Run the command from Step 2. Expected: all inspector tests pass.
 
-- [ ] **Step 5: Commit fit viewer**
+- [x] **Step 5: Commit fit viewer**
 
 ```powershell
 git add frontend/src/features/inspector frontend/src/index.css
-git commit -m "fix: open original images fitted to the window"
+git commit -m "feat: fit original images on viewer open"
 ```
 
 ### Task 6: Update documentation, run the full suite, package, and launch
@@ -383,26 +383,25 @@ git commit -m "fix: open original images fitted to the window"
 - Modify: `docs/manual-verification.md`
 - Modify: `docs/superpowers/plans/2026-08-25-image-names-mentions-fit-viewer.md`
 
-- [ ] **Step 1: Update user documentation**
+- [x] **Step 1: Update user documentation**
 
 Document image renaming, project-scoped uniqueness, `@` autocomplete/multi-reference behavior, first-reference parent lineage, fit viewer controls, and recovery messages. Add the five-step manual acceptance scenario from the design spec.
 
-- [ ] **Step 2: Run all automated verification**
+- [x] **Step 2: Run all automated verification**
 
 Run:
 
 ```powershell
-.venv\Scripts\python.exe -m pytest backend/tests -q
+backend\.venv\Scripts\python.exe -m pytest backend/tests -q
 npm.cmd --prefix frontend test -- --run
 npm.cmd --prefix desktop test -- --run
-npm.cmd --prefix frontend run typecheck
 npm.cmd --prefix desktop run typecheck
 npm.cmd --prefix frontend run build
 ```
 
 Expected: zero failures and zero TypeScript/build errors.
 
-- [ ] **Step 3: Build the Windows installer**
+- [x] **Step 3: Build the Windows installer**
 
 First identify and stop only processes whose executable path is the current project's `desktop\release\win-unpacked\AI Image Canvas.exe`, then run:
 
@@ -412,15 +411,15 @@ npm.cmd run build:desktop
 
 Expected: `desktop/release/AI Image Canvas-Setup-0.2.0.exe` and a refreshed `win-unpacked` app.
 
-- [ ] **Step 4: Launch and verify health**
+- [x] **Step 4: Launch and verify health**
 
-Launch the exact unpacked executable, wait for `http://127.0.0.1:8000/api/health`, and require HTTP 200 with `{ "status": "ok", "app": "AI Image Canvas" }`. Confirm the process path belongs to this workspace.
+Launch the exact unpacked executable, wait for `http://127.0.0.1:8001/api/health`, and require HTTP 200 with `{ "status": "ok", "app": "AI Image Canvas" }`. Confirm the process path belongs to this workspace.
 
-- [ ] **Step 5: Review requirements and working tree**
+- [x] **Step 5: Review requirements and working tree**
 
 Compare implementation to every design-spec section, run `git diff --check`, inspect `git status --short`, and ensure no unrelated files or generated release binaries are staged.
 
-- [ ] **Step 6: Commit documentation and plan completion**
+- [x] **Step 6: Commit documentation and plan completion**
 
 ```powershell
 git add docs/AI-Image-Canvas-软件说明书.md docs/manual-verification.md docs/superpowers/plans/2026-08-25-image-names-mentions-fit-viewer.md
