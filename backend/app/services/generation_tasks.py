@@ -23,6 +23,23 @@ ALLOWED_TRANSITIONS = {
     "failed": set(),
     "cancelled": set(),
 }
+DESKTOP_TRANSITIONS = {
+    "queued": {"opening_chatgpt", "cancelled"},
+    "opening_chatgpt": {"login_required", "ready", "failed", "cancelled"},
+    "login_required": {"ready", "collecting", "failed", "cancelled"},
+    "ready": {"sending", "collecting", "failed", "cancelled"},
+    "sending": {"generating", "refused", "rate_limited", "page_changed", "failed", "cancelled"},
+    "generating": {"collecting", "refused", "rate_limited", "page_changed", "failed", "cancelled"},
+    "collecting": {"importing", "refused", "rate_limited", "page_changed", "failed", "cancelled"},
+    "importing": {"completed", "failed", "cancelled"},
+    "page_changed": {"ready", "collecting", "failed", "cancelled"},
+    "rate_limited": {"ready", "collecting", "failed", "cancelled"},
+    "refused": set(),
+    "completed": set(),
+    "failed": {"ready", "collecting", "cancelled"},
+    "cancelled": set(),
+}
+
 
 
 class InvalidTaskTransition(Exception):
@@ -78,8 +95,30 @@ def transition(session: Session, task_id: str, status: str, progress_message: st
     return task
 
 
+def update_desktop_state(
+    session: Session,
+    task_id: str,
+    state: str,
+    message: str,
+    last_page_url: str | None = None,
+) -> GenerationTask:
+    task = get_task(session, task_id)
+    if state not in DESKTOP_TRANSITIONS.get(task.status, set()):
+        raise InvalidTaskTransition(f"无法从 {task.status} 切换到 {state}")
+    task.provider_mode = "desktop"
+    task.status = state
+    task.progress_message = message[:255]
+    if last_page_url is not None:
+        task.last_page_url = last_page_url[:2048]
+    task.updated_time = _now()
+    session.commit()
+    session.refresh(task)
+    return task
+
+
 def claim_next_task(session: Session) -> GenerationTask | None:
     active = session.scalar(select(GenerationTask).where(GenerationTask.status.in_(ACTIVE_STATUSES)).order_by(GenerationTask.created_time))
+
     if active is not None:
         return active
     queued = session.scalar(select(GenerationTask).where(GenerationTask.status == "queued").order_by(GenerationTask.created_time))
@@ -92,6 +131,9 @@ def cancel_task(session: Session, task_id: str) -> GenerationTask:
     task = get_task(session, task_id)
     if task.status in TERMINAL_STATUSES:
         raise InvalidTaskTransition("任务已结束")
+    if task.provider_mode == "desktop":
+        return update_desktop_state(session, task_id, "cancelled", "已取消")
+
     return transition(session, task_id, "cancelled", "已取消")
 
 def complete_with_image(
