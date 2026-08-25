@@ -15,7 +15,11 @@ export function GenerationPanel({ projectId, onCompleted }: GenerationPanelProps
   const { prompt, availability, task, error, setPrompt, setPanelOpen, refreshAvailability, generate, cancel } = useGenerationStore()
   const isRunning = task ? running.has(task.status) : false
 
-  useEffect(() => { void refreshAvailability() }, [refreshAvailability])
+  useEffect(() => {
+    void refreshAvailability()
+    const intervalId = window.setInterval(() => { void refreshAvailability() }, 3_000)
+    return () => window.clearInterval(intervalId)
+  }, [refreshAvailability])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
