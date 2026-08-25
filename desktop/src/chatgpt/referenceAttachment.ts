@@ -21,10 +21,11 @@ async function locateFileInput(debuggerApi: DebuggerLike): Promise<number> {
   return query.nodeId ?? 0
 }
 
-export async function attachReferenceFile(
+export async function attachReferenceFiles(
   webContents: AttachmentWebContents,
-  filePath: string,
+  filePaths: string[],
 ): Promise<void> {
+  if (filePaths.length === 0) throw new Error('CHATGPT_REFERENCE_FILES_EMPTY')
   const attachedHere = !webContents.debugger.isAttached()
   if (attachedHere) webContents.debugger.attach('1.3')
   try {
@@ -50,12 +51,12 @@ export async function attachReferenceFile(
     if (!nodeId) throw new Error('CHATGPT_FILE_INPUT_NOT_FOUND')
     await webContents.debugger.sendCommand('DOM.setFileInputFiles', {
       nodeId,
-      files: [filePath],
+      files: filePaths,
     })
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const ready = await webContents.executeJavaScript(`(() => {
         const input = document.querySelector('input[type="file"]')
-        return Boolean(input && input.files && input.files.length > 0)
+        return Boolean(input && input.files && input.files.length >= ${filePaths.length})
       })()`)
       if (ready === true) return
       await new Promise((resolve) => setTimeout(resolve, 150))
@@ -65,4 +66,3 @@ export async function attachReferenceFile(
     if (attachedHere) webContents.debugger.detach()
   }
 }
-

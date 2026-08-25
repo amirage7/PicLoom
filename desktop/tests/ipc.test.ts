@@ -28,12 +28,45 @@ describe('desktop IPC validation', () => {
   it('validates generation identifiers and Unicode prompt length', () => {
     expect(validateTaskId(' task-1 ')).toBe('task-1')
     expect(validateGenerationRequest({
-      taskId: 'task-1', projectId: 'project-1', prompt: '🌸'.repeat(20_000), parentImageId: null,
+      taskId: 'task-1', projectId: 'project-1', prompt: '🌸'.repeat(20_000), parentImageId: null, referenceImages: [],
     }).prompt).toHaveLength(40_000)
     expect(() => validateGenerationRequest({
-      taskId: 'task-1', projectId: 'project-1', prompt: '🌸'.repeat(20_001), parentImageId: null,
+      taskId: 'task-1', projectId: 'project-1', prompt: '🌸'.repeat(20_001), parentImageId: null, referenceImages: [],
     })).toThrow('INVALID_GENERATION_REQUEST')
     expect(() => validateTaskId('')).toThrow('INVALID_TASK_ID')
+  })
+
+  it('validates ordered named references and parent consistency', () => {
+    const valid = {
+      taskId: 'task-1',
+      projectId: 'project-1',
+      prompt: '组合角色',
+      parentImageId: 'build',
+      referenceImages: [
+        { imageId: 'build', name: ' 假面骑士build ' },
+        { imageId: 'sheep', name: '喜羊羊' },
+      ],
+    }
+    expect(validateGenerationRequest(valid)).toEqual({
+      ...valid,
+      referenceImages: [
+        { imageId: 'build', name: '假面骑士build' },
+        { imageId: 'sheep', name: '喜羊羊' },
+      ],
+    })
+
+    expect(() => validateGenerationRequest({ ...valid, referenceImages: 'bad' }))
+      .toThrow('INVALID_GENERATION_REQUEST')
+    expect(() => validateGenerationRequest({
+      ...valid,
+      referenceImages: Array.from({ length: 13 }, (_, index) => ({ imageId: `image-${index}`, name: `图${index}` })),
+    })).toThrow('INVALID_GENERATION_REQUEST')
+    expect(() => validateGenerationRequest({
+      ...valid,
+      referenceImages: [{ imageId: 'build', name: '甲' }, { imageId: 'build', name: '乙' }],
+    })).toThrow('INVALID_GENERATION_REQUEST')
+    expect(() => validateGenerationRequest({ ...valid, parentImageId: 'sheep' }))
+      .toThrow('INVALID_GENERATION_REQUEST')
   })
 })
 
@@ -62,10 +95,10 @@ describe('desktop IPC registration', () => {
     await expect(handlers.get(IPC_CHANNELS.reloadChatGpt)?.({})).resolves.toBeUndefined()
     expect(view.reload).toHaveBeenCalledOnce()
     await expect(handlers.get(IPC_CHANNELS.startGeneration)?.({}, {
-      taskId: 'task-1', projectId: 'project-1', prompt: '一朵花', parentImageId: null,
+      taskId: 'task-1', projectId: 'project-1', prompt: '一朵花', parentImageId: null, referenceImages: [],
     })).resolves.toBeUndefined()
     expect(orchestrator.start).toHaveBeenCalledWith({
-      taskId: 'task-1', projectId: 'project-1', prompt: '一朵花', parentImageId: null,
+      taskId: 'task-1', projectId: 'project-1', prompt: '一朵花', parentImageId: null, referenceImages: [],
     })
     await expect(handlers.get(IPC_CHANNELS.cancelGeneration)?.({}, '')).rejects.toThrow('INVALID_TASK_ID')
   })

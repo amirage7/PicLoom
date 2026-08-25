@@ -7,6 +7,7 @@ import type {
   DesktopGenerationEvent,
   DesktopGenerationRequest,
   DesktopGenerationState,
+  DesktopReferenceImage,
 } from './contracts.js'
 
 const GENERATION_TIMEOUT_MS = 8 * 60 * 1_000
@@ -42,7 +43,7 @@ interface GenerationOrchestratorOptions {
   inspect(webContents: AutomationWebContents, assistantResponseIdsBefore: string[], imageSourcesBefore: string[]): Promise<PageState>
   submit(webContents: AutomationWebContents, prompt: string): Promise<SubmissionReceipt>
   collect(sources: ImageSource[], webContents: AutomationWebContents, signal: AbortSignal): Promise<CollectedImage[]>
-  attachReference?(webContents: AutomationWebContents, imageId: string): Promise<() => Promise<void>>
+  attachReferences?(webContents: AutomationWebContents, imageIds: string[]): Promise<() => Promise<void>>
   backend: OrchestratorBackend
   emit(event: DesktopGenerationEvent): void
   createBatchId?: () => string
@@ -94,6 +95,15 @@ function defaultWait(milliseconds: number, signal: AbortSignal): Promise<void> {
 
 function cancelled(signal: AbortSignal): void {
   if (signal.aborted) throw signal.reason ?? new Error('cancelled')
+}
+
+export function buildReferencePrompt(prompt: string, references: DesktopReferenceImage[]): string {
+  if (references.length === 0) return prompt
+  const order = references
+    .map((reference, index) => `第${index + 1}张“${reference.name}”`)
+    .join('；')
+  return `参考图片顺序：${order}。\n` +
+    `请严格按照用户文本中的 @名称 对应这些附件。\n\n${prompt}`
 }
 
 export class GenerationOrchestrator {
@@ -168,7 +178,7 @@ export class GenerationOrchestrator {
     this.active = task
     this.recoverable = task
     this.emit(request.taskId, 'queued')
-    let cleanupReference: (() => Promise<void>) | null = null
+    let cleanupReferences: (() => Promise<void>) | null = null
 
     try {
       await this.transition(task, 'opening_chatgpt')
@@ -196,21 +206,25 @@ export class GenerationOrchestrator {
 
       await this.transition(task, 'ready')
       cancelled(task.controller.signal)
-      await this.transition(task, 'sending', request.parentImageId
-        ? { message: '正在上传参考图并发送 Prompt' }
+      await this.transition(task, 'sending', request.referenceImages.length > 0
+        ? { message: `正在上传 ${request.referenceImages.length} 张参考图并发送 Prompt` }
         : {})
-      if (request.parentImageId) {
-        if (!this.options.attachReference) throw new Error('REFERENCE_ATTACHMENT_UNAVAILABLE')
-        cleanupReference = await this.options.attachReference(webContents, request.parentImageId)
+      if (request.referenceImages.length > 0) {
+        if (!this.options.attachReferences) throw new Error('REFERENCE_ATTACHMENT_UNAVAILABLE')
+        cleanupReferences = await this.options.attachReferences(
+          webContents, request.referenceImages.map((reference) => reference.imageId)
+        )
       }
-      task.receipt = await this.options.submit(webContents, request.prompt)
+      task.receipt = await this.options.submit(
+        webContents, buildReferencePrompt(request.prompt, request.referenceImages)
+      )
       await this.transition(task, 'generating')
       await this.observeUntilComplete(task)
     } catch (error) {
       if (task.controller.signal.aborted) return
       await this.failRecoverably(task, error)
     } finally {
-      await cleanupReference?.().catch(() => undefined)
+      await cleanupReferences?.().catch(() => undefined)
       if (this.active === task) this.active = null
     }
   }

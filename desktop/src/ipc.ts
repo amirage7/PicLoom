@@ -87,6 +87,22 @@ export function validateViewCommand(value: unknown): {
   }
 }
 
+function validatedReferences(value: unknown): DesktopGenerationRequest['referenceImages'] | null {
+  if (!Array.isArray(value) || value.length > 12) return null
+  const references: DesktopGenerationRequest['referenceImages'] = []
+  const imageIds = new Set<string>()
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) return null
+    const input = item as Record<string, unknown>
+    const imageId = nonEmptyString(input.imageId, 10_000)
+    const name = nonEmptyString(input.name, 80)
+    if (!imageId || !name || imageIds.has(imageId)) return null
+    imageIds.add(imageId)
+    references.push({ imageId, name })
+  }
+  return references
+}
+
 export function validateGenerationRequest(value: unknown): DesktopGenerationRequest {
   if (typeof value !== 'object' || value === null) throw new Error('INVALID_GENERATION_REQUEST')
   const input = value as Record<string, unknown>
@@ -96,10 +112,16 @@ export function validateGenerationRequest(value: unknown): DesktopGenerationRequ
   const parentImageId = input.parentImageId === null
     ? null
     : nonEmptyString(input.parentImageId, 10_000)
-  if (!taskId || !projectId || !prompt || parentImageId === null && input.parentImageId !== null) {
+  const referenceImages = validatedReferences(input.referenceImages)
+  const expectedParentId = referenceImages?.[0]?.imageId ?? null
+  if (
+    !taskId || !projectId || !prompt || referenceImages === null ||
+    (parentImageId === null && input.parentImageId !== null) ||
+    parentImageId !== expectedParentId
+  ) {
     throw new Error('INVALID_GENERATION_REQUEST')
   }
-  return { taskId, projectId, prompt, parentImageId }
+  return { taskId, projectId, prompt, parentImageId, referenceImages }
 }
 
 export function validateSaveImageRequest(value: unknown): { imageId: string; fileName: string } {

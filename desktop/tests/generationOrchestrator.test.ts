@@ -10,6 +10,7 @@ const REQUEST: DesktopGenerationRequest = {
   projectId: 'project-1',
   prompt: '一朵花',
   parentImageId: null,
+  referenceImages: [],
 }
 
 function harness(states: PageState[]) {
@@ -30,8 +31,8 @@ function harness(states: PageState[]) {
   const abortableWait = vi.fn(async (_ms: number, signal: AbortSignal) => {
     if (signal.aborted) throw signal.reason
   })
-  const cleanupReference = vi.fn(async () => undefined)
-  const attachReference = vi.fn(async () => cleanupReference)
+  const cleanupReferences = vi.fn(async () => undefined)
+  const attachReferences = vi.fn(async () => cleanupReferences)
   const orchestrator = new GenerationOrchestrator({
     view: {
       loadHome: vi.fn(async () => undefined),
@@ -41,14 +42,14 @@ function harness(states: PageState[]) {
     inspect,
     submit,
     collect,
-    attachReference,
+    attachReferences,
     backend: { updateState, cancel: vi.fn(async () => undefined), completeBatch },
     createBatchId: () => 'batch-1',
     now: vi.fn(() => 1_000),
     wait: abortableWait,
     emit: (event) => events.push(event),
   })
-  return { orchestrator, events, updateState, completeBatch, inspect, submit, collect, attachReference, cleanupReference }
+  return { orchestrator, events, updateState, completeBatch, inspect, submit, collect, attachReferences, cleanupReferences }
 }
 
 describe('desktop generation orchestrator', () => {
@@ -150,13 +151,42 @@ describe('desktop generation orchestrator', () => {
     expect(test.events.at(-1)).toMatchObject({ state: 'failed', recoverable: true })
   })
 
-  it('attaches the parent image before submitting the prompt and cleans it up', async () => {
+  it('attaches named references in order before submitting a mapped prompt', async () => {
     const test = harness([{ kind: 'ready' }, {
       kind: 'completed', images: [{ src: 'blob:first', alt: '' }],
     }])
-    await test.orchestrator.start({ ...REQUEST, parentImageId: 'reference-1' })
-    expect(test.attachReference).toHaveBeenCalledWith(expect.anything(), 'reference-1')
-    expect(test.attachReference.mock.invocationCallOrder[0]!).toBeLessThan(test.submit.mock.invocationCallOrder[0]!)
-    expect(test.cleanupReference).toHaveBeenCalledOnce()
+    const prompt = '将@假面骑士build的身体和@喜羊羊的头部合成一个新的角色'
+    await test.orchestrator.start({
+      ...REQUEST,
+      prompt,
+      parentImageId: 'build',
+      referenceImages: [
+        { imageId: 'build', name: '假面骑士build' },
+        { imageId: 'sheep', name: '喜羊羊' },
+      ],
+    })
+
+    expect(test.attachReferences).toHaveBeenCalledWith(expect.anything(), ['build', 'sheep'])
+    expect(test.attachReferences.mock.invocationCallOrder[0]!).toBeLessThan(test.submit.mock.invocationCallOrder[0]!)
+    expect(test.submit).toHaveBeenCalledWith(
+      expect.anything(),
+      '参考图片顺序：第1张“假面骑士build”；第2张“喜羊羊”。\n' +
+      '请严格按照用户文本中的 @名称 对应这些附件。\n\n' + prompt,
+    )
+    expect(test.cleanupReferences).toHaveBeenCalledOnce()
+  })
+
+  it('cleans up attached references when prompt submission fails', async () => {
+    const test = harness([{ kind: 'ready' }])
+    test.submit.mockRejectedValueOnce(new Error('submission failed'))
+
+    await test.orchestrator.start({
+      ...REQUEST,
+      parentImageId: 'build',
+      referenceImages: [{ imageId: 'build', name: '假面骑士build' }],
+    })
+
+    expect(test.events.at(-1)?.state).toBe('failed')
+    expect(test.cleanupReferences).toHaveBeenCalledOnce()
   })
 })
