@@ -1,4 +1,5 @@
 import { fetchNextTask, heartbeat, pairExtension, updateTask, uploadTaskImage } from './bridgeClient'
+import { sendTaskMessage } from './taskExecutor'
 import type { BridgeErrorCode, GenerationTask } from './shared/protocol'
 
 
@@ -39,7 +40,15 @@ async function executeVisibleTask(task: GenerationTask): Promise<void> {
     await updateTask(task.id, stage, '正在发送 Prompt', undefined, tab.url)
     stage = 'generating'
     await updateTask(task.id, stage, 'ChatGPT 正在生成图片', undefined, tab.url)
-    const result = await chrome.tabs.sendMessage(tab.id!, { type: 'execute-task', task }) as {
+    const result = await sendTaskMessage<{
+      ok: boolean
+      bytes?: ArrayBuffer
+      mimeType?: string
+      chatUrl?: string
+      code?: BridgeErrorCode
+      error?: string
+    }>(chrome.tabs, tab.id!, { type: 'execute-task', task }, () => waitForTab(tab.id!))
+    const typedResult = result as {
       ok: boolean
       bytes?: ArrayBuffer
       mimeType?: string
@@ -47,10 +56,10 @@ async function executeVisibleTask(task: GenerationTask): Promise<void> {
       code?: BridgeErrorCode
       error?: string
     }
-    if (!result.ok || !result.bytes) throw Object.assign(new Error(result.error ?? '任务执行失败'), { code: result.code ?? 'PAGE_UNSUPPORTED' })
+    if (!typedResult.ok || !typedResult.bytes) throw Object.assign(new Error(typedResult.error ?? '任务执行失败'), { code: typedResult.code ?? 'PAGE_UNSUPPORTED' })
     stage = 'downloading'
-    await updateTask(task.id, stage, '正在保存图片', undefined, result.chatUrl)
-    await uploadTaskImage(task.id, new Blob([result.bytes], { type: result.mimeType ?? 'image/png' }), result.chatUrl ?? tab.url ?? 'https://chatgpt.com/')
+    await updateTask(task.id, stage, '正在保存图片', undefined, typedResult.chatUrl)
+    await uploadTaskImage(task.id, new Blob([typedResult.bytes], { type: typedResult.mimeType ?? 'image/png' }), typedResult.chatUrl ?? tab.url ?? 'https://chatgpt.com/')
   } catch (error) {
     const typed = error as Error & { code?: BridgeErrorCode }
     await updateTask(task.id, 'failed', typed.message || '任务执行失败', typed.code ?? 'PAGE_UNSUPPORTED').catch(() => undefined)

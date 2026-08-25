@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { TaskExecutionError, executeTask } from './taskExecutor'
+import { TaskExecutionError, executeTask, sendTaskMessage } from './taskExecutor'
 
 
 const task = { id: 'task-1', prompt: 'quiet observatory' }
@@ -36,4 +36,20 @@ describe('executeTask', () => {
     const adapter = { getState: vi.fn().mockReturnValue('unsupported'), submitPrompt: vi.fn() }
     await expect(executeTask(task, adapter, vi.fn())).rejects.toBeInstanceOf(TaskExecutionError)
   })
+})
+it('reloads an existing ChatGPT tab when its content script is missing', async () => {
+  const tabs = {
+    sendMessage: vi.fn()
+      .mockRejectedValueOnce(new Error('Could not establish connection. Receiving end does not exist.'))
+      .mockResolvedValueOnce({ ok: true }),
+    reload: vi.fn().mockResolvedValue(undefined),
+  }
+  const waitForReload = vi.fn().mockResolvedValue(undefined)
+
+  const result = await sendTaskMessage<{ ok: boolean }>(tabs, 42, { type: 'execute-task' }, waitForReload)
+
+  expect(tabs.reload).toHaveBeenCalledWith(42)
+  expect(waitForReload).toHaveBeenCalledTimes(1)
+  expect(tabs.sendMessage).toHaveBeenCalledTimes(2)
+  expect(result.ok).toBe(true)
 })
