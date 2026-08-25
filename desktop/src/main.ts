@@ -2,11 +2,12 @@ import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { app, BrowserWindow, shell, WebContentsView } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, WebContentsView } from 'electron'
 
 import { BackendSupervisor } from './backendSupervisor.js'
 import { ChatGptViewController } from './chatgptView.js'
 import { createMainWindowOptions, resolveRendererTarget } from './mainConfig.js'
+import { registerDesktopIpc } from './ipc.js'
 import {
   installNavigationSecurity,
   installSessionSecurity,
@@ -76,6 +77,11 @@ async function createApplicationWindow(): Promise<void> {
   installSessionSecurity(chatGptView.webContents.session)
   installNavigationSecurity(chatGptView.webContents, isAllowedChatGptUrl, shell.openExternal)
   void chatGptController.loadHome().catch(() => undefined)
+  registerDesktopIpc({
+    ipcMain,
+    view: chatGptController,
+    backendOnline: () => backendSupervisor !== null && !shutdownStarted,
+  })
 
   const developmentUrl = process.env.VITE_DEV_SERVER_URL
   const rendererTarget = resolveRendererTarget({
