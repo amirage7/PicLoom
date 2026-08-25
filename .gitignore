@@ -9,6 +9,11 @@ frontend/coverage/
 extension/node_modules/
 extension/dist/
 
+
+# Electron desktop
+desktop/node_modules/
+desktop/dist/
+desktop/release/
 # Python
 backend/.venv/
 backend/.pytest_cache/
