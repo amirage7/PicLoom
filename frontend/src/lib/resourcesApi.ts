@@ -1,3 +1,5 @@
+import { localBackendUrl } from './localBackend'
+
 export interface ProjectDto {
   id: string
   name: string
@@ -27,6 +29,14 @@ export interface ImageDto {
   created_time: string
 }
 
+function normalizeImage(value: ImageDto): ImageDto {
+  return {
+    ...value,
+    image_url: value.image_url.startsWith('/') ? localBackendUrl(value.image_url) : value.image_url,
+  }
+}
+
+
 export interface ImagePatch {
   prompt?: string
   tags?: string[]
@@ -39,7 +49,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/json')
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json')
-  const response = await fetch(path, { ...init, headers })
+  const response = await fetch(localBackendUrl(path), { ...init, headers })
   if (!response.ok) {
     let message = `请求失败 (${response.status})`
     try {
@@ -67,7 +77,7 @@ export const updatePrompt = (id: string, value: Partial<Pick<PromptDto, 'title' 
 export const duplicatePrompt = (id: string) => request<PromptDto>(`/api/prompts/${id}/duplicate`, { method: 'POST' })
 export const deletePrompt = (id: string) => request<void>(`/api/prompts/${id}`, { method: 'DELETE' })
 
-export const listImages = (projectId: string) => request<ImageDto[]>(`/api/projects/${projectId}/images`)
+export const listImages = (projectId: string) => request<ImageDto[]>(`/api/projects/${projectId}/images`).then((values) => values.map(normalizeImage))
 
 export function uploadImage(
   projectId: string,
@@ -80,9 +90,9 @@ export function uploadImage(
   body.append('position_x', String(value.positionX))
   body.append('position_y', String(value.positionY))
   if (value.parentId) body.append('parent_id', value.parentId)
-  return request<ImageDto>(`/api/projects/${projectId}/images`, { method: 'POST', body })
+  return request<ImageDto>(`/api/projects/${projectId}/images`, { method: 'POST', body }).then(normalizeImage)
 }
 
-export const patchImage = (id: string, value: ImagePatch) => request<ImageDto>(`/api/images/${id}`, { method: 'PATCH', body: json(value) })
-export const duplicateImage = (id: string) => request<ImageDto>(`/api/images/${id}/duplicate`, { method: 'POST' })
+export const patchImage = (id: string, value: ImagePatch) => request<ImageDto>(`/api/images/${id}`, { method: 'PATCH', body: json(value) }).then(normalizeImage)
+export const duplicateImage = (id: string) => request<ImageDto>(`/api/images/${id}/duplicate`, { method: 'POST' }).then(normalizeImage)
 export const deleteImage = (id: string) => request<void>(`/api/images/${id}`, { method: 'DELETE' })

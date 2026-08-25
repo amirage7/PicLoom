@@ -6,6 +6,7 @@ const STOP_TIMEOUT_MS = 5_000
 
 export interface BackendProcess {
   kill(signal?: NodeJS.Signals): boolean
+  readonly pid?: number | undefined
   once(name: 'exit', callback: (code: number | null) => void): void
 }
 
@@ -16,6 +17,7 @@ export interface BackendSupervisorOptions {
   port: number
   spawnProcess(command: string, args: string[], cwd: string): BackendProcess
   probe(url: string): Promise<boolean>
+  killProcessTree?(pid: number): Promise<void>
 }
 
 function delay(milliseconds: number): Promise<void> {
@@ -66,7 +68,11 @@ export class BackendSupervisor {
     const exitPromise = this.exitPromise
     if (!child || !exitPromise) return
 
-    child.kill('SIGTERM')
+    if (child.pid !== undefined && this.options.killProcessTree) {
+      await this.options.killProcessTree(child.pid)
+    } else {
+      child.kill('SIGTERM')
+    }
     const stopped = await Promise.race([
       exitPromise.then(() => true),
       delay(STOP_TIMEOUT_MS).then(() => false),

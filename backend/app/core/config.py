@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     cors_origins: tuple[str, ...] = (
         "http://127.0.0.1:3000",
         "http://localhost:3000",
+        "null",
     )
 
     data_dir: Path = Path(__file__).resolve().parents[3] / "data"

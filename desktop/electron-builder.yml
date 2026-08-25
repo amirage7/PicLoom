@@ -1,0 +1,24 @@
+appId: com.aiimagecanvas.desktop
+productName: AI Image Canvas
+artifactName: ${productName}-Setup-${version}.${ext}
+asar: true
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: ../frontend/dist
+    to: frontend/dist
+  - from: ../backend/dist/ai-image-canvas-backend.exe
+    to: backend/ai-image-canvas-backend.exe
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true

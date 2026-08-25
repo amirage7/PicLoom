@@ -6,6 +6,7 @@
     "desktop:dev": "npm.cmd --prefix desktop run dev",
     "desktop:test": "npm.cmd --prefix desktop test -- --run",
     "desktop:typecheck": "npm.cmd --prefix desktop run typecheck",
-    "desktop:package": "npm.cmd --prefix desktop run package"
+    "desktop:package": "npm.cmd --prefix desktop run package",
+    "build:desktop": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-desktop.ps1"
   }
 }

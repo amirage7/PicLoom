@@ -9,6 +9,7 @@ import {
 } from '../src/backendSupervisor.js'
 
 class FakeProcess implements BackendProcess {
+  readonly pid = 4242
   readonly signals: Array<NodeJS.Signals | undefined> = []
   private exitListener: ((code: number | null) => void) | undefined
 
@@ -119,6 +120,22 @@ describe('BackendSupervisor', () => {
     await vi.advanceTimersByTimeAsync(20_250)
 
     await rejection
+  })
+
+  it('terminates a packaged PyInstaller process tree without orphaning its server child', async () => {
+    const processTreeKill = vi.fn(async (pid: number) => {
+      process.exit(0)
+    })
+    const { supervisor, process } = createHarness({
+      packaged: true,
+      killProcessTree: processTreeKill,
+    })
+    await supervisor.start()
+
+    await supervisor.stop()
+
+    expect(processTreeKill).toHaveBeenCalledWith(4242)
+    expect(process.signals).toEqual([])
   })
 
   it('sends SIGTERM and waits for the owned child to exit', async () => {

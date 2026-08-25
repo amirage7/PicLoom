@@ -17,6 +17,8 @@ desktop/release/
 # Python
 backend/.venv/
 backend/.pytest_cache/
+backend/dist/
+backend/build/
 backend/**/__pycache__/
 backend/**/*.py[cod]
 

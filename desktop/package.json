@@ -1,5 +1,7 @@
 {
   "name": "ai-image-canvas-desktop",
+  "description": "Local-first AI image creation canvas with an embedded user-authenticated ChatGPT page.",
+  "author": "AI Image Canvas",
   "private": true,
   "version": "0.2.0",
   "main": "dist/src/main.js",
@@ -11,13 +13,11 @@
     "dev": "npm run build && electron dist/src/main.js",
     "package": "npm run build && electron-builder --config electron-builder.yml"
   },
-  "dependencies": {
-    "electron": "^37.2.6"
-  },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/node": "^22.17.2",
     "electron-builder": "^26.0.12",
+    "electron": "^37.2.6",
     "esbuild": "^0.28.2",
     "typescript": "~5.7.3",
     "vitest": "^3.2.4"

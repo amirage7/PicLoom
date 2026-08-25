@@ -40,7 +40,27 @@ async function probeBackend(url: string): Promise<boolean> {
   }
 }
 
+function killWindowsProcessTree(pid: number): Promise<void> {
+  return new Promise((resolve) => {
+    const killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+      windowsHide: true,
+      stdio: 'ignore',
+    })
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      resolve()
+    }
+    killer.once('exit', finish)
+    killer.once('error', finish)
+  })
+}
+
 async function createApplicationWindow(): Promise<void> {
+  if (app.isPackaged) {
+    process.env.AI_IMAGE_CANVAS_DATA_DIR = path.join(app.getPath('userData'), 'data')
+  }
   backendSupervisor = new BackendSupervisor({
     packaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
@@ -54,6 +74,7 @@ async function createApplicationWindow(): Promise<void> {
       })
     },
     probe: probeBackend,
+    ...(process.platform === 'win32' ? { killProcessTree: killWindowsProcessTree } : {}),
   })
   await backendSupervisor.start()
 
