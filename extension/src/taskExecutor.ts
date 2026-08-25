@@ -22,7 +22,6 @@ export class TaskExecutionError extends Error {
 
 interface TabMessageApi {
   sendMessage(tabId: number, message: unknown): Promise<unknown>
-  reload(tabId: number): Promise<unknown>
 }
 
 
@@ -30,14 +29,13 @@ export async function sendTaskMessage<T>(
   tabs: TabMessageApi,
   tabId: number,
   message: unknown,
-  waitForReload: () => Promise<void>,
+  reloadAndWait: (tabId: number) => Promise<void>,
 ): Promise<T> {
   try {
     return await tabs.sendMessage(tabId, message) as T
   } catch (error) {
     if (!(error instanceof Error) || !error.message.includes('Receiving end does not exist')) throw error
-    await tabs.reload(tabId)
-    await waitForReload()
+    await reloadAndWait(tabId)
     return await tabs.sendMessage(tabId, message) as T
   }
 }

@@ -42,14 +42,12 @@ it('reloads an existing ChatGPT tab when its content script is missing', async (
     sendMessage: vi.fn()
       .mockRejectedValueOnce(new Error('Could not establish connection. Receiving end does not exist.'))
       .mockResolvedValueOnce({ ok: true }),
-    reload: vi.fn().mockResolvedValue(undefined),
   }
-  const waitForReload = vi.fn().mockResolvedValue(undefined)
+  const reloadAndWait = vi.fn().mockResolvedValue(undefined)
 
-  const result = await sendTaskMessage<{ ok: boolean }>(tabs, 42, { type: 'execute-task' }, waitForReload)
+  const result = await sendTaskMessage<{ ok: boolean }>(tabs, 42, { type: 'execute-task' }, reloadAndWait)
 
-  expect(tabs.reload).toHaveBeenCalledWith(42)
-  expect(waitForReload).toHaveBeenCalledTimes(1)
+  expect(reloadAndWait).toHaveBeenCalledWith(42)
   expect(tabs.sendMessage).toHaveBeenCalledTimes(2)
   expect(result.ok).toBe(true)
 })

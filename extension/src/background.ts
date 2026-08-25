@@ -20,6 +20,21 @@ async function waitForTab(tabId: number): Promise<void> {
   })
 }
 
+async function reloadTabAndWait(tabId: number): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const listener = (updatedId: number, info: chrome.tabs.TabChangeInfo) => {
+      if (updatedId === tabId && info.status === 'complete') {
+        chrome.tabs.onUpdated.removeListener(listener)
+        resolve()
+      }
+    }
+    chrome.tabs.onUpdated.addListener(listener)
+    void chrome.tabs.reload(tabId).catch((error) => {
+      chrome.tabs.onUpdated.removeListener(listener)
+      reject(error)
+    })
+  })
+}
 
 async function ensureChatTab(): Promise<chrome.tabs.Tab> {
   const [existing] = await chrome.tabs.query({ url: 'https://chatgpt.com/*' })
@@ -47,7 +62,7 @@ async function executeVisibleTask(task: GenerationTask): Promise<void> {
       chatUrl?: string
       code?: BridgeErrorCode
       error?: string
-    }>(chrome.tabs, tab.id!, { type: 'execute-task', task }, () => waitForTab(tab.id!))
+    }>(chrome.tabs, tab.id!, { type: 'execute-task', task }, reloadTabAndWait)
     const typedResult = result as {
       ok: boolean
       bytes?: ArrayBuffer
