@@ -1,7 +1,25 @@
 from collections.abc import Sequence
 import argparse
+import os
+import sys
+from typing import TextIO
 
-import uvicorn
+
+def ensure_standard_streams() -> None:
+    streams: tuple[tuple[str, str], ...] = (
+        ("stdin", "r"),
+        ("stdout", "w"),
+        ("stderr", "w"),
+    )
+    for name, mode in streams:
+        if getattr(sys, name) is None:
+            stream: TextIO = open(os.devnull, mode, encoding="utf-8")
+            setattr(sys, name, stream)
+
+
+ensure_standard_streams()
+
+import uvicorn  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:
