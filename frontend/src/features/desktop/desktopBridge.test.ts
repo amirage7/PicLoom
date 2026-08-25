@@ -6,6 +6,7 @@ import type { DesktopBridgeApi } from './types'
 function fakeBridge(): DesktopBridgeApi {
   return {
     getRuntimeStatus: vi.fn(),
+    reloadChatGpt: vi.fn(),
     setChatGptView: vi.fn(),
     startGeneration: vi.fn(),
     cancelGeneration: vi.fn(),

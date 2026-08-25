@@ -35,6 +35,7 @@ export function createDesktopBridge(ipcRenderer: IpcRendererLike): DesktopBridge
   return {
     getRuntimeStatus: () => ipcRenderer.invoke(IPC_CHANNELS.runtimeStatus) as ReturnType<DesktopBridgeApi['getRuntimeStatus']>,
     setChatGptView: (input) => ipcRenderer.invoke(IPC_CHANNELS.setChatGptView, input) as Promise<void>,
+    reloadChatGpt: () => ipcRenderer.invoke(IPC_CHANNELS.reloadChatGpt) as Promise<void>,
     startGeneration: (request) => ipcRenderer.invoke(IPC_CHANNELS.startGeneration, request) as Promise<void>,
     cancelGeneration: (taskId) => ipcRenderer.invoke(IPC_CHANNELS.cancelGeneration, taskId) as Promise<void>,
     retryCollection: (taskId) => ipcRenderer.invoke(IPC_CHANNELS.retryCollection, taskId) as Promise<void>,

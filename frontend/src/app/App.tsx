@@ -4,7 +4,7 @@ import { Aperture, Settings2, X } from 'lucide-react'
 import { IconButton } from '../components/IconButton'
 import { CanvasBoard } from '../features/canvas/CanvasBoard'
 import { releaseAllObjectUrls } from '../features/canvas/store/canvasStore'
-import { ImageInspector } from '../features/inspector/ImageInspector'
+import { RightPanel } from '../components/panels/RightPanel'
 import { ProjectList } from '../features/projects/ProjectListPersisted'
 import { PromptLibrary } from '../features/prompts/PromptLibraryPersisted'
 import { useBackendHealth } from '../lib/useBackendHealth'
@@ -65,7 +65,7 @@ export default function App() {
       />
 
       {panels.isCompact && (panels.isLeftOpen || panels.isRightOpen) && <button type="button" className="panel-backdrop" aria-label="关闭侧栏" onClick={() => panels.closePanels()} />}
-      {panels.isRightOpen && <ImageInspector id="image-inspector" onClose={() => panels.closePanels()} />}
+      {panels.isRightOpen && <RightPanel id="image-inspector" onClose={() => panels.closePanels()} />}
     </div>
   )
 }

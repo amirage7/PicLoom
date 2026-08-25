@@ -11,12 +11,14 @@ describe('preload desktop bridge', () => {
 
     await bridge.cancelGeneration('task-1')
     const listener = vi.fn()
+    await bridge.reloadChatGpt()
     const unsubscribe = bridge.onGenerationEvent(listener)
     unsubscribe()
     unsubscribe()
 
     expect(invoke).toHaveBeenCalledWith('desktop:cancel-generation', 'task-1')
     expect(on).toHaveBeenCalledOnce()
+    expect(invoke).toHaveBeenCalledWith('desktop:reload-chatgpt')
     expect(removeListener).toHaveBeenCalledOnce()
   })
 

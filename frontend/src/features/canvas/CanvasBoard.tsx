@@ -27,6 +27,7 @@ import {
 import { useEffect, useRef, type ChangeEvent, type DragEvent } from 'react'
 
 import { SaveStatus } from '../../components/SaveStatus'
+import { getDesktopBridge } from '../desktop/desktopBridge'
 import { useAppStore } from '../../app/store'
 import { IconButton } from '../../components/IconButton'
 import type { BackendStatus } from '../../lib/useBackendHealth'
@@ -50,7 +51,17 @@ const statusText: Record<BackendStatus, string> = {
   checking: '正在连接', online: '本地服务在线', offline: '后端离线',
 }
 
-function Board({ projectId, shortcutsEnabled }: { projectId: string; shortcutsEnabled: boolean }) {
+function Board({
+  projectId,
+  shortcutsEnabled,
+  isRightPanelOpen,
+  onToggleRight,
+}: {
+  projectId: string
+  shortcutsEnabled: boolean
+  isRightPanelOpen: boolean
+  onToggleRight: (trigger: HTMLButtonElement) => void
+}) {
   const inputRef = useRef<HTMLInputElement>(null)
   const canvas = useCanvasStore((state) => state.canvases[projectId]) ?? { nodes: [], edges: [], selectedNodeId: null }
   const activeTool = useCanvasStore((state) => state.activeTool)
@@ -68,6 +79,7 @@ function Board({ projectId, shortcutsEnabled }: { projectId: string; shortcutsEn
   const deletePersistedNode = useCanvasStore((state) => state.deletePersistedNode)
   const isGenerationPanelOpen = useGenerationStore((state) => state.isPanelOpen)
   const setGenerationPanelOpen = useGenerationStore((state) => state.setPanelOpen)
+  const desktopMode = getDesktopBridge() !== null
   const { fitView, screenToFlowPosition, zoomIn, zoomOut, zoomTo } = useReactFlow()
   const { zoom } = useViewport()
   useCanvasShortcuts({
@@ -156,12 +168,18 @@ function Board({ projectId, shortcutsEnabled }: { projectId: string; shortcutsEn
         <IconButton label="抓手工具 (H)" isActive={activeTool === 'pan'} onClick={() => setTool('pan')}><Hand size={16} /></IconButton>
         <span className="toolbar-divider" />
         <IconButton label="添加图片" onClick={() => inputRef.current?.click()}><ImagePlus size={16} /></IconButton>
-        <IconButton label="使用 ChatGPT 生成图片" isActive={isGenerationPanelOpen} onClick={() => setGenerationPanelOpen(!isGenerationPanelOpen)}><Sparkles size={16} /></IconButton>
+        <IconButton label="使用 ChatGPT 生成图片" isActive={isGenerationPanelOpen} onClick={(event) => {
+          const nextOpen = !isGenerationPanelOpen
+          setGenerationPanelOpen(nextOpen)
+          if (desktopMode && nextOpen && !isRightPanelOpen) onToggleRight(event.currentTarget)
+        }}>
+          <Sparkles size={16} />
+        </IconButton>
         <IconButton label="连接图片：拖动节点两侧圆点" onClick={() => setTool('select')}><Link2 size={16} /></IconButton>
         <input ref={inputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={onInput} />
       </div>
 
-      {isGenerationPanelOpen && <GenerationPanel projectId={projectId} onCompleted={(imageId) => void loadCanvas(projectId).then(() => selectNode(projectId, imageId))} />}
+      {!desktopMode && isGenerationPanelOpen && <GenerationPanel projectId={projectId} onCompleted={(imageId) => void loadCanvas(projectId).then(() => selectNode(projectId, imageId))} />}
 
       {canvas.nodes.length === 0 && (
         <button className="canvas-empty-state canvas-drop-target" type="button" onClick={() => inputRef.current?.click()}>
@@ -211,7 +229,14 @@ export function CanvasBoard({ backendStatus, isLeftPanelOpen, isRightPanelOpen, 
           <IconButton label="切换详情栏" aria-controls="image-inspector" aria-expanded={isRightPanelOpen} onClick={(event) => onToggleRight(event.currentTarget)}><PanelRightClose size={16} /></IconButton>
         </div>
       </header>
-      <ReactFlowProvider key={activeProjectId}><Board projectId={activeProjectId} shortcutsEnabled={shortcutsEnabled} /></ReactFlowProvider>
+      <ReactFlowProvider key={activeProjectId}>
+        <Board
+          projectId={activeProjectId}
+          shortcutsEnabled={shortcutsEnabled}
+          isRightPanelOpen={isRightPanelOpen}
+          onToggleRight={onToggleRight}
+        />
+      </ReactFlowProvider>
     </main>
   )
 }

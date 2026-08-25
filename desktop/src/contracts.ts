@@ -39,6 +39,7 @@ export interface ChatGptViewBounds {
 export interface DesktopBridgeApi {
   getRuntimeStatus(): Promise<{ backendOnline: boolean; chatgptVisible: boolean }>
   setChatGptView(input: { visible: boolean; bounds?: ChatGptViewBounds }): Promise<void>
+  reloadChatGpt(): Promise<void>
   startGeneration(request: DesktopGenerationRequest): Promise<void>
   cancelGeneration(taskId: string): Promise<void>
   retryCollection(taskId: string): Promise<void>

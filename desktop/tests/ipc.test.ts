@@ -40,7 +40,7 @@ describe('desktop IPC validation', () => {
 describe('desktop IPC registration', () => {
   it('registers named handlers and keeps generation disabled until the orchestrator exists', async () => {
     const handlers = new Map<string, (_event: unknown, input?: unknown) => unknown>()
-    const view = { show: vi.fn(), hide: vi.fn(), isVisible: vi.fn(() => false) }
+    const view = { show: vi.fn(), hide: vi.fn(), reload: vi.fn(), isVisible: vi.fn(() => false) }
     registerDesktopIpc({
       ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
       view,
@@ -52,6 +52,8 @@ describe('desktop IPC registration', () => {
       backendOnline: true,
       chatgptVisible: false,
     })
+    await expect(handlers.get(IPC_CHANNELS.reloadChatGpt)?.({})).resolves.toBeUndefined()
+    expect(view.reload).toHaveBeenCalledOnce()
     await expect(handlers.get(IPC_CHANNELS.startGeneration)?.({}, {
       taskId: 'unknown-task', projectId: 'project-1', prompt: '一朵花', parentImageId: null,
     })).rejects.toThrow('DESKTOP_GENERATION_NOT_READY')

@@ -4,12 +4,13 @@ import { ChatGptViewController } from '../src/chatgptView.js'
 
 function createHarness() {
   const loadURL = vi.fn(async () => undefined)
+  const reload = vi.fn()
   const close = vi.fn()
   const setBounds = vi.fn()
   const addChildView = vi.fn()
   const removeChildView = vi.fn()
   const receivedOptions: unknown[] = []
-  const view = { webContents: { loadURL, close }, setBounds }
+  const view = { webContents: { loadURL, reload, close }, setBounds }
   const controller = new ChatGptViewController({
     parent: { addChildView, removeChildView },
     createView(options) {
@@ -21,6 +22,7 @@ function createHarness() {
     controller,
     view,
     loadURL,
+    reload,
     close,
     setBounds,
     addChildView,
@@ -52,6 +54,14 @@ describe('ChatGptViewController', () => {
     await controller.loadHome()
 
     expect(loadURL).toHaveBeenCalledWith('https://chatgpt.com/')
+  })
+
+  it('reloads the existing persistent ChatGPT page', () => {
+    const { controller, reload } = createHarness()
+
+    controller.reload()
+
+    expect(reload).toHaveBeenCalledOnce()
   })
 
   it('clamps bounds and does not destroy the view when hidden', () => {

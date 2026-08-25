@@ -3,6 +3,7 @@ import type { ChatGptViewBounds } from './contracts.js'
 interface ViewWebContents {
   loadURL(url: string): Promise<void>
   close(): void
+  reload(): void
 }
 
 interface ViewLike {
@@ -32,6 +33,7 @@ export interface ChatGptViewControllerApi {
   show(bounds: ChatGptViewBounds): void
   hide(): void
   setBounds(bounds: ChatGptViewBounds): void
+  reload(): void
   isVisible(): boolean
   loadHome(): Promise<void>
   destroy(): void
@@ -82,6 +84,11 @@ export class ChatGptViewController implements ChatGptViewControllerApi {
       width: clampDimension(bounds.width),
       height: clampDimension(bounds.height),
     })
+  }
+
+  reload(): void {
+    if (this.destroyed) throw new Error('ChatGPT view has been destroyed')
+    this.view.webContents.reload()
   }
 
   isVisible(): boolean {

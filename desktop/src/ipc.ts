@@ -6,6 +6,7 @@ import type {
 export const IPC_CHANNELS = {
   runtimeStatus: 'desktop:get-runtime-status',
   setChatGptView: 'desktop:set-chatgpt-view',
+  reloadChatGpt: 'desktop:reload-chatgpt',
   startGeneration: 'desktop:start-generation',
   cancelGeneration: 'desktop:cancel-generation',
   retryCollection: 'desktop:retry-collection',
@@ -17,6 +18,7 @@ interface IpcMainLike {
 
 interface ViewControllerLike {
   show(bounds: ChatGptViewBounds): void
+  reload(): void
   hide(): void
   isVisible(): boolean
 }
@@ -95,6 +97,9 @@ export function registerDesktopIpc(options: RegisterDesktopIpcOptions): void {
     const command = validateViewCommand(value)
     if (command.visible && command.bounds) options.view.show(command.bounds)
     else options.view.hide()
+  })
+  options.ipcMain.handle(IPC_CHANNELS.reloadChatGpt, async () => {
+    options.view.reload()
   })
   options.ipcMain.handle(IPC_CHANNELS.startGeneration, async (_event, value) => {
     validateGenerationRequest(value)
