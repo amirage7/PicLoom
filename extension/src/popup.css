@@ -1,0 +1,8 @@
+:root { color-scheme: dark; font: 14px/1.45 system-ui, sans-serif; background: #161918; color: #eef1ef; }
+body { width: 280px; margin: 0; }
+main { display: grid; gap: 12px; padding: 18px; }
+h1, p { margin: 0; }
+form { display: grid; gap: 7px; }
+input, button { border: 1px solid #3b4441; border-radius: 7px; padding: 9px; background: #202524; color: inherit; }
+button { cursor: pointer; background: #d8e1dc; color: #101312; }
+a { color: #a9c9ba; }
