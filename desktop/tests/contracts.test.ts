@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   DesktopGenerationEvent,
   DesktopGenerationRequest,
-} from '../src/contracts'
+} from '../src/contracts.js'
 
 describe('desktop IPC contracts', () => {
   it('round-trips a generation request and event as JSON', () => {
