@@ -38,12 +38,19 @@ describe('desktop IPC validation', () => {
 })
 
 describe('desktop IPC registration', () => {
-  it('registers named handlers and keeps generation disabled until the orchestrator exists', async () => {
+  it('registers named handlers and delegates generation commands to the orchestrator', async () => {
     const handlers = new Map<string, (_event: unknown, input?: unknown) => unknown>()
     const view = { show: vi.fn(), hide: vi.fn(), reload: vi.fn(), isVisible: vi.fn(() => false) }
+    const orchestrator = {
+      start: vi.fn(async () => undefined),
+      cancel: vi.fn(async () => undefined),
+      retryCollection: vi.fn(async () => undefined),
+      getLastEvent: vi.fn(() => null),
+    }
     registerDesktopIpc({
       ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
       view,
+      orchestrator,
       backendOnline: () => true,
     })
 
@@ -55,8 +62,11 @@ describe('desktop IPC registration', () => {
     await expect(handlers.get(IPC_CHANNELS.reloadChatGpt)?.({})).resolves.toBeUndefined()
     expect(view.reload).toHaveBeenCalledOnce()
     await expect(handlers.get(IPC_CHANNELS.startGeneration)?.({}, {
-      taskId: 'unknown-task', projectId: 'project-1', prompt: '一朵花', parentImageId: null,
-    })).rejects.toThrow('DESKTOP_GENERATION_NOT_READY')
+      taskId: 'task-1', projectId: 'project-1', prompt: '一朵花', parentImageId: null,
+    })).resolves.toBeUndefined()
+    expect(orchestrator.start).toHaveBeenCalledWith({
+      taskId: 'task-1', projectId: 'project-1', prompt: '一朵花', parentImageId: null,
+    })
     await expect(handlers.get(IPC_CHANNELS.cancelGeneration)?.({}, '')).rejects.toThrow('INVALID_TASK_ID')
   })
 })

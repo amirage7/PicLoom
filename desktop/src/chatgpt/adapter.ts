@@ -134,3 +134,38 @@ function runtimeInspectPage(assistantResponseIdsBefore: string[]): PageState {
 export function createInspectPageScript(assistantResponseIdsBefore: string[]): string {
   return `(${runtimeInspectPage.toString()})(${JSON.stringify(assistantResponseIdsBefore)})`
 }
+
+interface InspectableWebContents {
+  executeJavaScript(script: string): Promise<unknown>
+}
+
+function isPageState(value: unknown): value is PageState {
+  if (typeof value !== 'object' || value === null) return false
+  const state = value as Partial<PageState>
+  if (state.kind === 'ready' || state.kind === 'generating') return true
+  if (state.kind === 'completed') {
+    return Array.isArray(state.images) && state.images.every((image) => (
+      typeof image === 'object' && image !== null
+      && typeof (image as { src?: unknown }).src === 'string'
+      && typeof (image as { alt?: unknown }).alt === 'string'
+    ))
+  }
+  if (state.kind === 'login_required' || state.kind === 'refused' || state.kind === 'rate_limited') {
+    return typeof state.reason === 'string'
+  }
+  return state.kind === 'page_changed' && typeof state.diagnostics === 'string'
+}
+
+export async function inspectChatGptPage(
+  webContents: InspectableWebContents,
+  assistantResponseIdsBefore: string[],
+): Promise<PageState> {
+  const result = await webContents.executeJavaScript(createInspectPageScript(assistantResponseIdsBefore))
+  if (!isPageState(result)) {
+    return {
+      kind: 'page_changed',
+      diagnostics: `Adapter ${CHATGPT_ADAPTER_VERSION}: invalid page result`,
+    }
+  }
+  return result
+}

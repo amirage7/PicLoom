@@ -45,6 +45,11 @@ export function createDesktopBridge(ipcRenderer: IpcRendererLike): DesktopBridge
       }
       let subscribed = true
       ipcRenderer.on('desktop:generation-event', handler)
+      void Promise.resolve(ipcRenderer.invoke(IPC_CHANNELS.lastGenerationEvent)).then((event) => {
+        if (subscribed && isGenerationEvent(event)) listener(event)
+      }).catch(() => {
+        // The live subscription remains available if recovery lookup fails.
+      })
       return () => {
         if (!subscribed) return
         subscribed = false

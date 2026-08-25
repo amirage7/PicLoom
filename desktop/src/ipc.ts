@@ -5,6 +5,7 @@ import type {
 
 export const IPC_CHANNELS = {
   runtimeStatus: 'desktop:get-runtime-status',
+  lastGenerationEvent: 'desktop:get-last-generation-event',
   setChatGptView: 'desktop:set-chatgpt-view',
   reloadChatGpt: 'desktop:reload-chatgpt',
   startGeneration: 'desktop:start-generation',
@@ -22,11 +23,19 @@ interface ViewControllerLike {
   hide(): void
   isVisible(): boolean
 }
+interface OrchestratorLike {
+  start(request: DesktopGenerationRequest): Promise<void>
+  cancel(taskId: string): Promise<void>
+  retryCollection(taskId: string): Promise<void>
+  getLastEvent(): unknown
+}
+
 
 interface RegisterDesktopIpcOptions {
   ipcMain: IpcMainLike
   view: ViewControllerLike
   backendOnline(): boolean
+  orchestrator: OrchestratorLike
 }
 
 function nonEmptyString(value: unknown, maximum: number): string | null {
@@ -93,6 +102,7 @@ export function registerDesktopIpc(options: RegisterDesktopIpcOptions): void {
     backendOnline: options.backendOnline(),
     chatgptVisible: options.view.isVisible(),
   }))
+  options.ipcMain.handle(IPC_CHANNELS.lastGenerationEvent, async () => options.orchestrator.getLastEvent())
   options.ipcMain.handle(IPC_CHANNELS.setChatGptView, async (_event, value) => {
     const command = validateViewCommand(value)
     if (command.visible && command.bounds) options.view.show(command.bounds)
@@ -102,15 +112,12 @@ export function registerDesktopIpc(options: RegisterDesktopIpcOptions): void {
     options.view.reload()
   })
   options.ipcMain.handle(IPC_CHANNELS.startGeneration, async (_event, value) => {
-    validateGenerationRequest(value)
-    throw new Error('DESKTOP_GENERATION_NOT_READY')
+    await options.orchestrator.start(validateGenerationRequest(value))
   })
   options.ipcMain.handle(IPC_CHANNELS.cancelGeneration, async (_event, value) => {
-    validateTaskId(value)
-    throw new Error('DESKTOP_GENERATION_NOT_READY')
+    await options.orchestrator.cancel(validateTaskId(value))
   })
   options.ipcMain.handle(IPC_CHANNELS.retryCollection, async (_event, value) => {
-    validateTaskId(value)
-    throw new Error('DESKTOP_GENERATION_NOT_READY')
+    await options.orchestrator.retryCollection(validateTaskId(value))
   })
 }

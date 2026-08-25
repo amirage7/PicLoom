@@ -6,6 +6,11 @@ import { app, BrowserWindow, ipcMain, shell, WebContentsView } from 'electron'
 
 import { BackendSupervisor } from './backendSupervisor.js'
 import { ChatGptViewController } from './chatgptView.js'
+import { inspectChatGptPage } from './chatgpt/adapter.js'
+import { collectChatGptImages } from './chatgpt/download.js'
+import { submitPrompt } from './chatgpt/promptSubmission.js'
+import { GenerationBackendClient } from './generationBackendClient.js'
+import { GenerationOrchestrator } from './generationOrchestrator.js'
 import { DEVELOPMENT_BACKEND_PORT, createMainWindowOptions, resolveRendererTarget } from './mainConfig.js'
 import { registerDesktopIpc } from './ipc.js'
 import {
@@ -18,6 +23,7 @@ import {
 let mainWindow: BrowserWindow | null = null
 let chatGptController: ChatGptViewController | null = null
 let backendSupervisor: BackendSupervisor | null = null
+let generationOrchestrator: GenerationOrchestrator | null = null
 let shutdownStarted = false
 let shutdownComplete = false
 
@@ -76,10 +82,27 @@ async function createApplicationWindow(): Promise<void> {
   if (!chatGptView) throw new Error('Failed to create ChatGPT view')
   installSessionSecurity(chatGptView.webContents.session)
   installNavigationSecurity(chatGptView.webContents, isAllowedChatGptUrl, shell.openExternal)
+  const generationBackend = new GenerationBackendClient(backendSupervisor.baseUrl)
+  generationOrchestrator = new GenerationOrchestrator({
+    view: chatGptController,
+    inspect: inspectChatGptPage,
+    submit: submitPrompt,
+    collect: (sources, webContents, signal) => collectChatGptImages(
+      sources,
+      webContents,
+      {
+        sessionFetch: (url, init) => chatGptView.webContents.session.fetch(url, init),
+        signal,
+      },
+    ),
+    backend: generationBackend,
+    emit: (event) => mainWindow?.webContents.send('desktop:generation-event', event),
+  })
   void chatGptController.loadHome().catch(() => undefined)
   registerDesktopIpc({
     ipcMain,
     view: chatGptController,
+    orchestrator: generationOrchestrator,
     backendOnline: () => backendSupervisor !== null && !shutdownStarted,
   })
 
@@ -97,8 +120,10 @@ async function createApplicationWindow(): Promise<void> {
   mainWindow.once('ready-to-show', () => mainWindow?.show())
   if (!mainWindow.isVisible()) mainWindow.show()
   mainWindow.on('closed', () => {
+    void generationOrchestrator?.shutdown()
     chatGptController?.destroy()
     chatGptController = null
+    generationOrchestrator = null
     mainWindow = null
   })
 }
@@ -108,6 +133,7 @@ function beginShutdown(event: Electron.Event): void {
   event.preventDefault()
   if (shutdownStarted) return
   shutdownStarted = true
+  void generationOrchestrator?.shutdown()
   chatGptController?.destroy()
   void backendSupervisor?.stop().finally(() => {
     shutdownComplete = true

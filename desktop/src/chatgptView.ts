@@ -4,6 +4,8 @@ interface ViewWebContents {
   loadURL(url: string): Promise<void>
   close(): void
   reload(): void
+  getURL(): string
+  executeJavaScript(script: string): Promise<unknown>
 }
 
 interface ViewLike {
@@ -34,6 +36,8 @@ export interface ChatGptViewControllerApi {
   hide(): void
   setBounds(bounds: ChatGptViewBounds): void
   reload(): void
+  getUrl(): string
+  getWebContents(): ViewWebContents
   isVisible(): boolean
   loadHome(): Promise<void>
   destroy(): void
@@ -89,6 +93,14 @@ export class ChatGptViewController implements ChatGptViewControllerApi {
   reload(): void {
     if (this.destroyed) throw new Error('ChatGPT view has been destroyed')
     this.view.webContents.reload()
+  }
+
+  getUrl(): string {
+    return this.view.webContents.getURL()
+  }
+
+  getWebContents(): ViewWebContents {
+    return this.view.webContents
   }
 
   isVisible(): boolean {

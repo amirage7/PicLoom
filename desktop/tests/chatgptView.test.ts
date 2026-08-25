@@ -10,7 +10,9 @@ function createHarness() {
   const addChildView = vi.fn()
   const removeChildView = vi.fn()
   const receivedOptions: unknown[] = []
-  const view = { webContents: { loadURL, reload, close }, setBounds }
+  const getURL = vi.fn(() => 'https://chatgpt.com/c/test')
+  const executeJavaScript = vi.fn(async () => undefined)
+  const view = { webContents: { loadURL, reload, close, getURL, executeJavaScript }, setBounds }
   const controller = new ChatGptViewController({
     parent: { addChildView, removeChildView },
     createView(options) {
