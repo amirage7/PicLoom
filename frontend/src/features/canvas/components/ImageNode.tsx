@@ -64,7 +64,8 @@ export function ImageNode({ data, selected }: NodeProps<CanvasNode>) {
       </div>
 
       <div className="image-node-copy">
-        <p>{image.prompt}</p>
+        <strong className="image-node-name" title={image.name}>{image.name}</strong>
+        <p className="image-node-prompt" title={image.prompt}>{image.prompt}</p>
         <time dateTime={image.createdTime}>{formatCreatedTime(image.createdTime)}</time>
       </div>
 

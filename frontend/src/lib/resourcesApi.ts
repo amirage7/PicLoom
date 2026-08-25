@@ -21,6 +21,7 @@ export interface ImageDto {
   image_path: string
   image_url: string
   file_name: string
+  name: string
   prompt: string
   tags: string[]
   parent_id: string | null
@@ -38,6 +39,7 @@ function normalizeImage(value: ImageDto): ImageDto {
 
 
 export interface ImagePatch {
+  name?: string
   prompt?: string
   tags?: string[]
   parent_id?: string | null

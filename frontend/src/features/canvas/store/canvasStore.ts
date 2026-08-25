@@ -79,6 +79,7 @@ function nodeFromDto(value: ImageDto): CanvasNode {
         imageUrl: value.image_url,
         imageSource: 'stored',
         fileName: value.file_name,
+        name: value.name,
         prompt: value.prompt,
         tags: value.tags,
         parentId: value.parent_id,
@@ -122,7 +123,7 @@ interface CanvasStore {
   duplicatePersistedNode: (projectId: string, nodeId: string) => Promise<string>
   deletePersistedNode: (projectId: string, nodeId: string) => Promise<void>
   deleteNode: (projectId: string, nodeId: string) => void
-  updateImage: (projectId: string, nodeId: string, changes: Partial<Pick<CanvasImage, 'prompt' | 'tags'>>) => void
+  updateImage: (projectId: string, nodeId: string, changes: Partial<Pick<CanvasImage, 'name' | 'prompt' | 'tags'>>) => void
   reset: () => void
 }
 
@@ -213,6 +214,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
               imageUrl,
               imageSource: 'upload',
               fileName: file.name,
+              name: file.name.replace(/\.[^.]+$/, '') || '未命名图片',
               prompt: '尚未添加 Prompt',
               tags: [],
               parentId: null,
@@ -268,6 +270,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       data: {
         image: {
           ...source.data.image,
+          name: `${source.data.image.name} 副本`,
           id,
           parentId: null,
           createdTime: new Date().toISOString(),

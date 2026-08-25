@@ -146,7 +146,8 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .image-node:hover .image-node-actions, .image-node:focus-within .image-node-actions, .image-node--selected .image-node-actions { opacity: 1; }
 .image-node-actions .icon-button { width: 27px; height: 27px; }
 .image-node-copy { padding: 10px 11px 11px; }
-.image-node-copy p { display: -webkit-box; min-height: 32px; margin: 0 0 7px; overflow: hidden; color: var(--muted); font-size: 11px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.image-node-name { display: block; margin-bottom: 4px; overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 620; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.image-node-prompt { display: -webkit-box; min-height: 32px; margin: 0 0 7px; overflow: hidden; color: var(--muted); font-size: 10px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .image-node-copy time { color: var(--subtle); font-size: 9px; font-variant-numeric: tabular-nums; }
 .image-node-handle { width: 10px !important; height: 10px !important; background: var(--primary) !important; border: 2px solid oklch(0.18 0.008 188) !important; opacity: 0; transition: opacity 140ms ease, transform 140ms ease; }
 .image-node:hover .image-node-handle, .image-node--selected .image-node-handle { opacity: 1; }
@@ -199,6 +200,9 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .inspector-section textarea { min-height: 112px; padding: 9px 10px; resize: vertical; }
 .inspector-section input { height: 34px; padding: 0 10px; }
 .inspector-section textarea:focus, .inspector-section input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px oklch(0.72 0.1 188 / 0.12); }
+.inspector-section-title small { color: var(--subtle); font-size: 9px; font-weight: 500; }
+.inspector-field-error { margin-top: 6px; color: oklch(0.78 0.1 24); font-size: 10px; line-height: 1.4; }
+.inspector-section input[aria-invalid="true"] { border-color: oklch(0.58 0.12 24); }
 .inspector-metadata dl { display: grid; gap: 9px; margin: 0; }
 .inspector-metadata dl div { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 8px; font-size: 10px; }
 .inspector-metadata dt { color: var(--subtle); }

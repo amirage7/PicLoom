@@ -36,6 +36,63 @@ describe('ImageInspector', () => {
     expect(image?.tags).toEqual(['建筑', '夜景'])
   })
 
+  it('renames a stored image from the details panel', async () => {
+    const user = userEvent.setup()
+    const persistMetadata = vi.fn(async () => undefined)
+    useCanvasStore.setState({ persistMetadata })
+    const canvas = useCanvasStore.getState().canvases['future-city']
+    useCanvasStore.setState({
+      canvases: {
+        ...useCanvasStore.getState().canvases,
+        'future-city': {
+          ...canvas,
+          nodes: canvas.nodes.map((node) => node.id === 'city-overview'
+            ? { ...node, data: { image: { ...node.data.image, imageSource: 'stored' } } }
+            : node),
+        },
+      },
+    })
+    useCanvasStore.getState().selectNode('future-city', 'city-overview')
+    render(<ImageInspector />)
+
+    const input = screen.getByRole('textbox', { name: '图片名称' })
+    await user.clear(input)
+    await user.type(input, '假面骑士build')
+    await user.tab()
+
+    await waitFor(() => expect(persistMetadata).toHaveBeenCalledWith(
+      'future-city', 'city-overview', { name: '假面骑士build' },
+    ))
+  })
+
+  it('shows a conflict message without discarding the typed image name', async () => {
+    const user = userEvent.setup()
+    const persistMetadata = vi.fn(async () => { throw new Error('当前项目已有同名图片') })
+    useCanvasStore.setState({ persistMetadata })
+    const canvas = useCanvasStore.getState().canvases['future-city']
+    useCanvasStore.setState({
+      canvases: {
+        ...useCanvasStore.getState().canvases,
+        'future-city': {
+          ...canvas,
+          nodes: canvas.nodes.map((node) => node.id === 'city-overview'
+            ? { ...node, data: { image: { ...node.data.image, imageSource: 'stored' } } }
+            : node),
+        },
+      },
+    })
+    useCanvasStore.getState().selectNode('future-city', 'city-overview')
+    render(<ImageInspector />)
+
+    const input = screen.getByRole('textbox', { name: '图片名称' })
+    await user.clear(input)
+    await user.type(input, '喜羊羊')
+    await user.tab()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('当前项目已有同名图片')
+    expect(input).toHaveValue('喜羊羊')
+  })
+
   it('keeps the empty state when no node is selected', () => {
     render(<ImageInspector />)
     expect(screen.getByText('未选择图片')).toBeInTheDocument()

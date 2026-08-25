@@ -27,6 +27,9 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
   const persistMetadata = useCanvasStore((state) => state.persistMetadata)
   const duplicatePersistedNode = useCanvasStore((state) => state.duplicatePersistedNode)
   const deletePersistedNode = useCanvasStore((state) => state.deletePersistedNode)
+  const [imageName, setImageName] = useState('')
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [savingName, setSavingName] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [tagsText, setTagsText] = useState('')
   const [copied, setCopied] = useState(false)
@@ -36,6 +39,9 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
   const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
+    setImageName(selected?.data.image.name ?? '')
+    setNameError(null)
+    setSavingName(false)
     setPrompt(selected?.data.image.prompt ?? '')
     setTagsText(selected?.data.image.tags.join(', ') ?? '')
     setCopied(false)
@@ -43,7 +49,7 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
     setViewerOpen(false)
     setZoom(100)
     setSaveError(null)
-  }, [selected?.id, selected?.data.image.prompt, selected?.data.image.tags])
+  }, [selected?.id, selected?.data.image.name, selected?.data.image.prompt, selected?.data.image.tags])
 
   useEffect(() => {
     if (!viewerOpen) return
@@ -64,6 +70,39 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
     })
     if (selected.data.image.imageSource === 'stored') {
       void persistMetadata(projectId, selected.id, { prompt: prompt.trim() || '尚未添加 Prompt', tags: tagsText.split(/[,，]/) })
+    }
+  }
+
+  const saveName = async () => {
+    if (!selected || savingName) return
+    const nextName = imageName.trim()
+    if (!nextName) {
+      setNameError('图片名称不能为空')
+      return
+    }
+    if ([...nextName].length > 80) {
+      setNameError('图片名称不能超过 80 个字符')
+      return
+    }
+    if (nextName === selected.data.image.name) {
+      setImageName(nextName)
+      setNameError(null)
+      return
+    }
+
+    setSavingName(true)
+    setNameError(null)
+    try {
+      if (selected.data.image.imageSource === 'stored') {
+        await persistMetadata(projectId, selected.id, { name: nextName })
+      } else {
+        updateImage(projectId, selected.id, { name: nextName })
+      }
+      setImageName(nextName)
+    } catch (error) {
+      setNameError(error instanceof Error ? error.message : '图片名称保存失败')
+    } finally {
+      setSavingName(false)
     }
   }
 
@@ -121,6 +160,27 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
             <button type="button" onClick={() => void saveOriginal()}><Download size={14} />保存原图</button>
           </div>
           {saveError && <div className="inspector-save-error" role="alert">{saveError}</div>}
+          <section className="inspector-section inspector-name-section">
+            <div className="inspector-section-title">
+              <span><Info size={14} /> 图片名称</span>
+              {savingName && <small>保存中…</small>}
+            </div>
+            <input
+              aria-label="图片名称"
+              aria-invalid={nameError ? 'true' : undefined}
+              value={imageName}
+              onChange={(event) => { setImageName(event.target.value); setNameError(null) }}
+              onBlur={() => void saveName()}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur()
+                if (event.key === 'Escape') {
+                  setImageName(selected.data.image.name)
+                  setNameError(null)
+                }
+              }}
+            />
+            {nameError && <div className="inspector-field-error" role="alert">{nameError}</div>}
+          </section>
           <section className="inspector-section">
             <div className="inspector-section-title"><span><Info size={14} /> Prompt</span><button type="button" onClick={() => void copyPrompt()}>{copied ? <Check size={13} /> : <Copy size={13} />}{copied ? '已复制' : '复制'}</button></div>
             <textarea aria-label="图片 Prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} onBlur={save} rows={6} />
@@ -134,7 +194,7 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
             <dl>
               <div><dt>文件</dt><dd>{selected.data.image.fileName}</dd></div>
               <div><dt>创建</dt><dd>{formatDate(selected.data.image.createdTime)}</dd></div>
-              <div><dt>父版本</dt><dd>{selected.data.image.parentId ? canvas.nodes.find((node) => node.id === selected.data.image.parentId)?.data.image.fileName ?? '已删除' : '初始版本'}</dd></div>
+              <div><dt>父版本</dt><dd>{selected.data.image.parentId ? canvas.nodes.find((node) => node.id === selected.data.image.parentId)?.data.image.name ?? '已删除' : '初始版本'}</dd></div>
               <div><dt>子版本</dt><dd>{canvas.edges.filter((edge) => edge.source === selected.id).length}</dd></div>
             </dl>
           </section>

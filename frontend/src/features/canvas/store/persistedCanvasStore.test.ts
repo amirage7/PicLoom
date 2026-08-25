@@ -12,7 +12,7 @@ vi.mock('../../../lib/resourcesApi', async () => {
 
 const parent = {
   id: 'parent', project_id: 'future-city', image_path: 'images/future-city/parent.png',
-  image_url: '/media/images/future-city/parent.png', file_name: 'parent.png', prompt: 'Parent',
+  image_url: '/media/images/future-city/parent.png', file_name: 'parent.png', name: '父图', prompt: 'Parent',
   tags: ['建筑'], parent_id: null, position_x: 10, position_y: 20, created_time: '2026-08-24T00:00:00Z',
 }
 const child = { ...parent, id: 'child', file_name: 'child.png', image_url: '/media/images/future-city/child.png', parent_id: 'parent', position_x: 300 }

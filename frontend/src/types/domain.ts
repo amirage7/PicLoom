@@ -29,6 +29,7 @@ export interface CanvasImage {
   imageUrl: string
   imageSource: 'fixture' | 'upload' | 'stored'
   fileName: string
+  name: string
   prompt: string
   tags: string[]
   parentId: string | null

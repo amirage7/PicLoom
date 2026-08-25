@@ -17,6 +17,7 @@ const node: CanvasNode = {
       imageUrl: '/fixture.webp',
       imageSource: 'fixture',
       fileName: 'fixture.webp',
+      name: '滨海未来城市',
       prompt: 'A calm coastal city with precise civic architecture',
       tags: ['建筑'],
       parentId: null,
@@ -44,6 +45,7 @@ describe('ImageNode', () => {
     )
 
     expect(screen.getByAltText('fixture.webp')).toBeInTheDocument()
+    expect(screen.getByText('滨海未来城市')).toBeInTheDocument()
     expect(screen.getByText('A calm coastal city with precise civic architecture')).toBeInTheDocument()
     expect(screen.getByText('2026/08/21 09:30')).toBeInTheDocument()
     expect(screen.getByLabelText('父版本连接点')).toBeInTheDocument()
