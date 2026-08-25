@@ -35,4 +35,18 @@ describe('generation backend client', () => {
 
     await expect(client.cancel('task-1')).rejects.toThrow('invalid transition')
   })
+
+  it('downloads a stored image for ChatGPT attachment and local saving', async () => {
+    const request = vi.fn(async () => new Response(Uint8Array.of(1, 2, 3), {
+      headers: { 'Content-Disposition': 'attachment; filename="reference.png"' },
+    }))
+    const client = new GenerationBackendClient('http://127.0.0.1:8001', request)
+    const result = await client.getImageFile('image one')
+    expect(request).toHaveBeenCalledWith(
+      'http://127.0.0.1:8001/api/images/image%20one/content',
+      expect.objectContaining({ headers: { Accept: 'image/*' } }),
+    )
+    expect(result.fileName).toBe('reference.png')
+    expect([...result.bytes]).toEqual([1, 2, 3])
+  })
 })

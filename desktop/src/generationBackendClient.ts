@@ -29,6 +29,22 @@ export class GenerationBackendClient {
     private readonly request: typeof fetch = fetch,
   ) {}
 
+  async getImageFile(imageId: string): Promise<{ bytes: Uint8Array; fileName: string }> {
+    const response = await this.request(
+      `${this.baseUrl}/api/images/${encodeURIComponent(imageId)}/content`,
+      { headers: { Accept: 'image/*' } },
+    )
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '')
+      throw new Error(detail || `Local backend request failed (${response.status})`)
+    }
+    const disposition = response.headers.get('Content-Disposition') ?? ''
+    const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+    const quoted = disposition.match(/filename="([^"]+)"/i)?.[1]
+    const fileName = encoded ? decodeURIComponent(encoded) : quoted ?? `image-${imageId}.png`
+    return { bytes: new Uint8Array(await response.arrayBuffer()), fileName }
+  }
+
   async updateState(
     taskId: string,
     state: DesktopGenerationState,

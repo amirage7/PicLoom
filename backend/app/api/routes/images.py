@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_session
@@ -47,6 +48,15 @@ async def post_image(
     try:
         return image_resources.create_image(session, request.app.state.settings.data_dir, project_id, content, file.filename or "image", prompt, position_x, position_y, parent_id)
     except (ResourceNotFoundError, ImageRelationshipError, ImageStorageError) as error:
+        raise translate_error(error) from error
+
+
+@router.get("/images/{image_id}/content", response_class=FileResponse)
+def get_image_content(request: Request, image_id: str, session: Session = Depends(get_session)):
+    try:
+        path, file_name = image_resources.get_image_file(session, request.app.state.settings.data_dir, image_id)
+        return FileResponse(path, filename=file_name)
+    except (ResourceNotFoundError, ImageStorageError) as error:
         raise translate_error(error) from error
 
 

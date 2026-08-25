@@ -39,6 +39,7 @@ export function createDesktopBridge(ipcRenderer: IpcRendererLike): DesktopBridge
     startGeneration: (request) => ipcRenderer.invoke(IPC_CHANNELS.startGeneration, request) as Promise<void>,
     cancelGeneration: (taskId) => ipcRenderer.invoke(IPC_CHANNELS.cancelGeneration, taskId) as Promise<void>,
     retryCollection: (taskId) => ipcRenderer.invoke(IPC_CHANNELS.retryCollection, taskId) as Promise<void>,
+    saveImage: (input) => ipcRenderer.invoke(IPC_CHANNELS.saveImage, input) as ReturnType<DesktopBridgeApi['saveImage']>,
     onGenerationEvent(listener) {
       const handler = (_event: unknown, payload: unknown) => {
         if (isGenerationEvent(payload)) listener(payload)

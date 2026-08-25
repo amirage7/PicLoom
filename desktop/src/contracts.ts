@@ -43,5 +43,6 @@ export interface DesktopBridgeApi {
   startGeneration(request: DesktopGenerationRequest): Promise<void>
   cancelGeneration(taskId: string): Promise<void>
   retryCollection(taskId: string): Promise<void>
+  saveImage(input: { imageId: string; fileName: string }): Promise<{ saved: boolean; filePath?: string }>
   onGenerationEvent(listener: (event: DesktopGenerationEvent) => void): () => void
 }

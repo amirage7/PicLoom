@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DesktopBridgeApi } from '../desktop/types'
+import { useAppStore } from '../../app/store'
+import { useCanvasStore } from '../canvas/store/canvasStore'
 import { ChatGptGenerationPanel } from './ChatGptGenerationPanel'
 import * as api from './generationApi'
 
@@ -16,6 +18,7 @@ function installBridge(): DesktopBridgeApi {
     startGeneration: vi.fn(async () => undefined),
     cancelGeneration: vi.fn(async () => undefined),
     retryCollection: vi.fn(async () => undefined),
+    saveImage: vi.fn(async () => ({ saved: false })),
     onGenerationEvent: vi.fn(() => () => undefined),
   }
   window.aiImageCanvasDesktop = bridge
@@ -23,6 +26,8 @@ function installBridge(): DesktopBridgeApi {
 }
 
 beforeEach(() => {
+  useAppStore.setState({ activeProjectId: 'future-city' })
+  useCanvasStore.getState().reset()
   vi.mocked(api.createGenerationTask).mockResolvedValue({
     id: 'task-1', project_id: 'project-1', provider: 'chatgpt-web', prompt: '一朵花',
     parent_image_id: null, status: 'queued', progress_message: 'queued', chat_url: null,
@@ -70,5 +75,21 @@ describe('ChatGptGenerationPanel', () => {
     await user.click(screen.getByRole('button', { name: '重新加载 ChatGPT 页面' }))
 
     expect(bridge.reloadChatGpt).toHaveBeenCalledOnce()
+  })
+
+  it('uses a project image as an actual generation reference and parent version', async () => {
+    const user = userEvent.setup()
+    const bridge = installBridge()
+    useCanvasStore.getState().selectNode('future-city', 'city-overview')
+    render(<ChatGptGenerationPanel projectId="future-city" />)
+    await user.selectOptions(screen.getByRole('combobox', { name: '参考图片' }), 'city-overview')
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), '基于参考图修改光线')
+    await user.click(screen.getByRole('button', { name: '使用 ChatGPT 生成' }))
+    await waitFor(() => expect(api.createGenerationTask).toHaveBeenCalledWith(
+      'future-city', '基于参考图修改光线', 'city-overview',
+    ))
+    expect(bridge.startGeneration).toHaveBeenCalledWith(expect.objectContaining({
+      parentImageId: 'city-overview',
+    }))
   })
 })

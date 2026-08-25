@@ -1,14 +1,16 @@
 import { spawn } from 'node:child_process'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { app, BrowserWindow, ipcMain, shell, WebContentsView } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, WebContentsView } from 'electron'
 
 import { BackendSupervisor } from './backendSupervisor.js'
 import { ChatGptViewController } from './chatgptView.js'
 import { inspectChatGptPage } from './chatgpt/adapter.js'
 import { collectChatGptImages } from './chatgpt/download.js'
 import { submitPrompt } from './chatgpt/promptSubmission.js'
+import { attachReferenceFile } from './chatgpt/referenceAttachment.js'
 import { GenerationBackendClient } from './generationBackendClient.js'
 import { GenerationOrchestrator } from './generationOrchestrator.js'
 import { DEVELOPMENT_BACKEND_PORT, createMainWindowOptions, resolveRendererTarget } from './mainConfig.js'
@@ -108,6 +110,20 @@ async function createApplicationWindow(): Promise<void> {
     view: chatGptController,
     inspect: inspectChatGptPage,
     submit: submitPrompt,
+    attachReference: async (webContents, imageId) => {
+      const image = await generationBackend.getImageFile(imageId)
+      const directory = await mkdtemp(path.join(app.getPath('temp'), 'ai-image-canvas-ref-'))
+      const filePath = path.join(directory, path.basename(image.fileName))
+      await writeFile(filePath, image.bytes)
+      image.bytes.fill(0)
+      try {
+        await attachReferenceFile(webContents as typeof chatGptView.webContents, filePath)
+      } catch (error) {
+        await rm(directory, { recursive: true, force: true })
+        throw error
+      }
+      return async () => rm(directory, { recursive: true, force: true })
+    },
     collect: (sources, webContents, signal) => collectChatGptImages(
       sources,
       webContents,
@@ -125,6 +141,22 @@ async function createApplicationWindow(): Promise<void> {
     view: chatGptController,
     orchestrator: generationOrchestrator,
     backendOnline: () => backendSupervisor !== null && !shutdownStarted,
+    imageSaver: {
+      async save({ imageId, fileName }) {
+        const image = await generationBackend.getImageFile(imageId)
+        try {
+          const result = await dialog.showSaveDialog(mainWindow!, {
+            defaultPath: path.basename(fileName || image.fileName),
+            title: '保存原图',
+          })
+          if (result.canceled || !result.filePath) return { saved: false }
+          await writeFile(result.filePath, image.bytes)
+          return { saved: true, filePath: result.filePath }
+        } finally {
+          image.bytes.fill(0)
+        }
+      },
+    },
   })
 
   const developmentUrl = process.env.VITE_DEV_SERVER_URL

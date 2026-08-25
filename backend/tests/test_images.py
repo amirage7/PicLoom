@@ -71,3 +71,12 @@ def test_list_images_returns_project_only(client: TestClient, image_bytes) -> No
     response = client.get("/api/projects/future-city/images")
     assert response.status_code == 200
     assert [item["id"] for item in response.json()] == [future["id"]]
+
+
+def test_download_image_content_by_id(client: TestClient, image_bytes) -> None:
+    image = upload_image(client, image_bytes)
+    response = client.get(f"/api/images/{image['id']}/content")
+    assert response.status_code == 200
+    assert response.headers["content-disposition"].endswith('filename="source.png"')
+    assert response.headers["content-type"] == "image/png"
+    assert response.content.startswith(b"\x89PNG")

@@ -99,6 +99,13 @@ def validate_parent(session: Session, image_id: str, project_id: str, parent_id:
         current = session.get(Image, current.parent_id) if current.parent_id else None
 
 
+def get_image_file(session: Session, data_dir: Path, image_id: str) -> tuple[Path, str]:
+    image = session.get(Image, image_id)
+    if image is None:
+        raise ResourceNotFoundError("图片不存在")
+    return resolve_stored_path(data_dir, image.image_path), image.file_name
+
+
 def update_image(session: Session, image_id: str, payload: ImageUpdate) -> dict:
     image = session.get(Image, image_id)
     if image is None:

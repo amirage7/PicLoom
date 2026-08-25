@@ -11,6 +11,7 @@ export const IPC_CHANNELS = {
   startGeneration: 'desktop:start-generation',
   cancelGeneration: 'desktop:cancel-generation',
   retryCollection: 'desktop:retry-collection',
+  saveImage: 'desktop:save-image',
 } as const
 
 interface IpcMainLike {
@@ -30,12 +31,16 @@ interface OrchestratorLike {
   getLastEvent(): unknown
 }
 
+interface ImageSaverLike {
+  save(input: { imageId: string; fileName: string }): Promise<{ saved: boolean; filePath?: string }>
+}
 
 interface RegisterDesktopIpcOptions {
   ipcMain: IpcMainLike
   view: ViewControllerLike
   backendOnline(): boolean
   orchestrator: OrchestratorLike
+  imageSaver?: ImageSaverLike
 }
 
 function nonEmptyString(value: unknown, maximum: number): string | null {
@@ -97,6 +102,15 @@ export function validateGenerationRequest(value: unknown): DesktopGenerationRequ
   return { taskId, projectId, prompt, parentImageId }
 }
 
+export function validateSaveImageRequest(value: unknown): { imageId: string; fileName: string } {
+  if (typeof value !== 'object' || value === null) throw new Error('INVALID_SAVE_IMAGE_REQUEST')
+  const input = value as Record<string, unknown>
+  const imageId = nonEmptyString(input.imageId, 10_000)
+  const fileName = nonEmptyString(input.fileName, 255)
+  if (!imageId || !fileName) throw new Error('INVALID_SAVE_IMAGE_REQUEST')
+  return { imageId, fileName }
+}
+
 export function registerDesktopIpc(options: RegisterDesktopIpcOptions): void {
   options.ipcMain.handle(IPC_CHANNELS.runtimeStatus, async () => ({
     backendOnline: options.backendOnline(),
@@ -119,5 +133,9 @@ export function registerDesktopIpc(options: RegisterDesktopIpcOptions): void {
   })
   options.ipcMain.handle(IPC_CHANNELS.retryCollection, async (_event, value) => {
     await options.orchestrator.retryCollection(validateTaskId(value))
+  })
+  options.ipcMain.handle(IPC_CHANNELS.saveImage, async (_event, value) => {
+    if (!options.imageSaver) throw new Error('SAVE_IMAGE_UNAVAILABLE')
+    return options.imageSaver.save(validateSaveImageRequest(value))
   })
 }

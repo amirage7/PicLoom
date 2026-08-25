@@ -42,6 +42,7 @@ interface GenerationOrchestratorOptions {
   inspect(webContents: AutomationWebContents, assistantResponseIdsBefore: string[], imageSourcesBefore: string[]): Promise<PageState>
   submit(webContents: AutomationWebContents, prompt: string): Promise<SubmissionReceipt>
   collect(sources: ImageSource[], webContents: AutomationWebContents, signal: AbortSignal): Promise<CollectedImage[]>
+  attachReference?(webContents: AutomationWebContents, imageId: string): Promise<() => Promise<void>>
   backend: OrchestratorBackend
   emit(event: DesktopGenerationEvent): void
   createBatchId?: () => string
@@ -167,6 +168,7 @@ export class GenerationOrchestrator {
     this.active = task
     this.recoverable = task
     this.emit(request.taskId, 'queued')
+    let cleanupReference: (() => Promise<void>) | null = null
 
     try {
       await this.transition(task, 'opening_chatgpt')
@@ -194,7 +196,13 @@ export class GenerationOrchestrator {
 
       await this.transition(task, 'ready')
       cancelled(task.controller.signal)
-      await this.transition(task, 'sending')
+      await this.transition(task, 'sending', request.parentImageId
+        ? { message: '正在上传参考图并发送 Prompt' }
+        : {})
+      if (request.parentImageId) {
+        if (!this.options.attachReference) throw new Error('REFERENCE_ATTACHMENT_UNAVAILABLE')
+        cleanupReference = await this.options.attachReference(webContents, request.parentImageId)
+      }
       task.receipt = await this.options.submit(webContents, request.prompt)
       await this.transition(task, 'generating')
       await this.observeUntilComplete(task)
@@ -202,6 +210,7 @@ export class GenerationOrchestrator {
       if (task.controller.signal.aborted) return
       await this.failRecoverably(task, error)
     } finally {
+      await cleanupReference?.().catch(() => undefined)
       if (this.active === task) this.active = null
     }
   }

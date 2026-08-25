@@ -2,6 +2,7 @@ import { Eye, EyeOff, RefreshCw, RotateCcw, Send, Square } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { getDesktopBridge } from '../desktop/desktopBridge'
+import { useCanvasStore } from '../canvas/store/canvasStore'
 import { createGenerationTask } from './generationApi'
 
 interface ChatGptGenerationPanelProps {
@@ -12,7 +13,9 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
   const bridge = getDesktopBridge()
   const viewSlotRef = useRef<HTMLDivElement>(null)
   const taskIdRef = useRef<string | null>(null)
+  const canvas = useCanvasStore((state) => state.canvases[projectId])
   const [prompt, setPrompt] = useState('')
+  const [referenceImageId, setReferenceImageId] = useState('')
   const [viewVisible, setViewVisible] = useState(false)
   const [pending, setPending] = useState(false)
   const [taskId, setTaskId] = useState<string | null>(null)
@@ -85,7 +88,8 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
     setError(null)
     setMessage('正在把 Prompt 发送到 ChatGPT…')
     try {
-      const task = await createGenerationTask(projectId, prompt.trim())
+      const parentImageId = referenceImageId || undefined
+      const task = await createGenerationTask(projectId, prompt.trim(), parentImageId)
       const nextTaskId = task.id
       taskIdRef.current = nextTaskId
       setTaskId(nextTaskId)
@@ -93,7 +97,7 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
         taskId: nextTaskId,
         projectId,
         prompt: prompt.trim(),
-        parentImageId: null,
+        parentImageId: parentImageId ?? null,
       })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '暂时无法启动生成任务')
@@ -146,6 +150,15 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
       )}
 
       <form className="desktop-generation-form" onSubmit={submit}>
+        <label htmlFor="desktop-reference-image">参考图片（可选）</label>
+        <select id="desktop-reference-image" aria-label="参考图片" value={referenceImageId} onChange={(event) => setReferenceImageId(event.target.value)}>
+          <option value="">不使用参考图</option>
+          {canvas?.nodes.map((node) => <option key={node.id} value={node.id}>{node.data.image.fileName}</option>)}
+        </select>
+        {referenceImageId && canvas && (() => {
+          const image = canvas.nodes.find((node) => node.id === referenceImageId)?.data.image
+          return image ? <div className="desktop-reference-preview"><img src={image.imageUrl} alt="参考图预览" /><span>{image.fileName}<small>将上传到 ChatGPT，并作为父版本</small></span><button type="button" onClick={() => setReferenceImageId('')}>移除</button></div> : null
+        })()}
         <label htmlFor="desktop-generation-prompt">Prompt</label>
         <textarea
           id="desktop-generation-prompt"

@@ -30,6 +30,8 @@ function harness(states: PageState[]) {
   const abortableWait = vi.fn(async (_ms: number, signal: AbortSignal) => {
     if (signal.aborted) throw signal.reason
   })
+  const cleanupReference = vi.fn(async () => undefined)
+  const attachReference = vi.fn(async () => cleanupReference)
   const orchestrator = new GenerationOrchestrator({
     view: {
       loadHome: vi.fn(async () => undefined),
@@ -39,13 +41,14 @@ function harness(states: PageState[]) {
     inspect,
     submit,
     collect,
+    attachReference,
     backend: { updateState, cancel: vi.fn(async () => undefined), completeBatch },
     createBatchId: () => 'batch-1',
     now: vi.fn(() => 1_000),
     wait: abortableWait,
     emit: (event) => events.push(event),
   })
-  return { orchestrator, events, updateState, completeBatch, inspect, submit, collect }
+  return { orchestrator, events, updateState, completeBatch, inspect, submit, collect, attachReference, cleanupReference }
 }
 
 describe('desktop generation orchestrator', () => {
@@ -145,5 +148,15 @@ describe('desktop generation orchestrator', () => {
     await test.orchestrator.start(REQUEST)
 
     expect(test.events.at(-1)).toMatchObject({ state: 'failed', recoverable: true })
+  })
+
+  it('attaches the parent image before submitting the prompt and cleans it up', async () => {
+    const test = harness([{ kind: 'ready' }, {
+      kind: 'completed', images: [{ src: 'blob:first', alt: '' }],
+    }])
+    await test.orchestrator.start({ ...REQUEST, parentImageId: 'reference-1' })
+    expect(test.attachReference).toHaveBeenCalledWith(expect.anything(), 'reference-1')
+    expect(test.attachReference.mock.invocationCallOrder[0]!).toBeLessThan(test.submit.mock.invocationCallOrder[0]!)
+    expect(test.cleanupReference).toHaveBeenCalledOnce()
   })
 })
