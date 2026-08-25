@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest",
-    "dev": "npm run build && electron dist/main.js",
+    "dev": "npm run build && electron dist/src/main.js",
     "package": "npm run build && electron-builder --config electron-builder.yml"
   },
   "dependencies": {

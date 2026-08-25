@@ -6,7 +6,7 @@ import { app, BrowserWindow, ipcMain, shell, WebContentsView } from 'electron'
 
 import { BackendSupervisor } from './backendSupervisor.js'
 import { ChatGptViewController } from './chatgptView.js'
-import { createMainWindowOptions, resolveRendererTarget } from './mainConfig.js'
+import { DEVELOPMENT_BACKEND_PORT, createMainWindowOptions, resolveRendererTarget } from './mainConfig.js'
 import { registerDesktopIpc } from './ipc.js'
 import {
   installNavigationSecurity,
@@ -39,7 +39,7 @@ async function createApplicationWindow(): Promise<void> {
     packaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
     repoRoot: repositoryRoot(),
-    port: 8000,
+    port: DEVELOPMENT_BACKEND_PORT,
     spawnProcess(command, args, cwd) {
       return spawn(command, args, {
         cwd,

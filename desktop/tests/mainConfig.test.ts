@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { createMainWindowOptions, resolveRendererTarget } from '../src/mainConfig.js'
+import {
+  DEVELOPMENT_BACKEND_PORT,
+  createMainWindowOptions,
+  resolveRendererTarget,
+} from '../src/mainConfig.js'
 
 describe('desktop main window configuration', () => {
+  it('uses the same backend port as the Vite development proxy', () => {
+    expect(DEVELOPMENT_BACKEND_PORT).toBe(8001)
+  })
+
   it('hardens the React renderer and uses only the local preload', () => {
     expect(createMainWindowOptions('C:\\app\\preload.js')).toMatchObject({
       show: false,
