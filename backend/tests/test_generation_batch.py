@@ -134,3 +134,21 @@ def test_desktop_state_endpoint_enforces_transitions(client):
     assert cancelled.status_code == 200
     assert cancelled.json()["status"] == "cancelled"
     assert backward.status_code == 409
+
+
+def test_desktop_state_allows_page_changed_while_chatgpt_is_opening(client):
+    project_id = create_project(client)
+    task = create_task(client, project_id)
+
+    opening = client.patch(
+        f"/api/generation-tasks/{task['id']}/desktop-state",
+        json={"state": "opening_chatgpt", "message": "opening"},
+    )
+    changed = client.patch(
+        f"/api/generation-tasks/{task['id']}/desktop-state",
+        json={"state": "page_changed", "message": "composer missing"},
+    )
+
+    assert opening.status_code == 200
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["status"] == "page_changed"

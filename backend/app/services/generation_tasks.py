@@ -25,7 +25,7 @@ ALLOWED_TRANSITIONS = {
 }
 DESKTOP_TRANSITIONS = {
     "queued": {"opening_chatgpt", "cancelled"},
-    "opening_chatgpt": {"login_required", "ready", "failed", "cancelled"},
+    "opening_chatgpt": {"login_required", "ready", "page_changed", "failed", "cancelled"},
     "login_required": {"ready", "collecting", "failed", "cancelled"},
     "ready": {"sending", "collecting", "failed", "cancelled"},
     "sending": {"generating", "refused", "rate_limited", "page_changed", "failed", "cancelled"},

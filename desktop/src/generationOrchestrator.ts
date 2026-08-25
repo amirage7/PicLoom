@@ -10,6 +10,7 @@ import type {
 } from './contracts.js'
 
 const GENERATION_TIMEOUT_MS = 8 * 60 * 1_000
+const INITIAL_COMPOSER_ATTEMPTS = 20
 
 interface AutomationWebContents {
   executeJavaScript(script: string): Promise<unknown>
@@ -171,9 +172,17 @@ export class GenerationOrchestrator {
       await this.options.view.loadHome()
       const webContents = this.options.view.getWebContents()
       let initialState = await this.options.inspect(webContents, [])
-      while (initialState.kind === 'login_required') {
-        await this.transition(task, 'login_required')
-        await this.waitFor(750, task.controller.signal)
+      let composerAttempts = 0
+      while (initialState.kind === 'login_required' || initialState.kind === 'page_changed') {
+        if (initialState.kind === 'login_required') {
+          if (task.state !== 'login_required') await this.transition(task, 'login_required')
+          composerAttempts = 0
+          await this.waitFor(750, task.controller.signal)
+        } else {
+          composerAttempts += 1
+          if (composerAttempts >= INITIAL_COMPOSER_ATTEMPTS) break
+          await this.waitFor(500, task.controller.signal)
+        }
         cancelled(task.controller.signal)
         initialState = await this.options.inspect(webContents, [])
       }

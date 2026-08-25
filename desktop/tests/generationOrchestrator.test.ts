@@ -81,6 +81,20 @@ describe('desktop generation orchestrator', () => {
     expect(test.submit).toHaveBeenCalledOnce()
   })
 
+  it('waits for the ChatGPT composer to hydrate before declaring the page changed', async () => {
+    const test = harness([
+      { kind: 'page_changed', diagnostics: 'composer not rendered yet' },
+      { kind: 'ready' },
+      { kind: 'completed', images: [{ src: 'blob:first', alt: '' }] },
+    ])
+
+    await test.orchestrator.start(REQUEST)
+
+    expect(test.inspect).toHaveBeenCalledTimes(3)
+    expect(test.submit).toHaveBeenCalledOnce()
+    expect(test.events.at(-1)?.state).toBe('completed')
+  })
+
   it.each([
     [{ kind: 'refused', reason: 'no' }, 'refused'],
     [{ kind: 'rate_limited', reason: 'later' }, 'rate_limited'],
