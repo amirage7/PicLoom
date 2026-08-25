@@ -71,6 +71,7 @@ function Board({
   const applyNodeChanges = useCanvasStore((state) => state.applyNodeChanges)
   const applyEdgeChanges = useCanvasStore((state) => state.applyEdgeChanges)
   const selectNode = useCanvasStore((state) => state.selectNode)
+  const selectImportedBatch = useCanvasStore((state) => state.selectImportedBatch)
   const deleteNode = useCanvasStore((state) => state.deleteNode)
   const loadCanvas = useCanvasStore((state) => state.loadCanvas)
   const uploadPersistedImages = useCanvasStore((state) => state.uploadPersistedImages)
@@ -93,6 +94,25 @@ function Board({
   useEffect(() => {
     if (useAppStore.getState().saveStatus !== 'offline') void loadCanvas(projectId).catch(() => undefined)
   }, [loadCanvas, projectId])
+
+  useEffect(() => {
+    const bridge = getDesktopBridge()
+    if (!bridge) return
+    return bridge.onGenerationEvent((generationEvent) => {
+      if (generationEvent.state !== 'completed' || generationEvent.imageIds.length === 0) return
+      void loadCanvas(projectId).then(() => {
+        const canvasState = useCanvasStore.getState().canvases[projectId]
+        const importedNodes = canvasState?.nodes.filter((node) => generationEvent.imageIds.includes(node.id)) ?? []
+        if (importedNodes.length === 0) return
+        selectImportedBatch(projectId, generationEvent.imageIds)
+        requestAnimationFrame(() => {
+          const refreshed = useCanvasStore.getState().canvases[projectId]?.nodes
+            .filter((node) => generationEvent.imageIds.includes(node.id)) ?? []
+          if (refreshed.length > 0) void fitView({ nodes: refreshed, padding: 0.25, duration: 250 })
+        })
+      }).catch(() => undefined)
+    })
+  }, [fitView, loadCanvas, projectId, selectImportedBatch])
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {

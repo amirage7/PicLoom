@@ -1,6 +1,6 @@
 import type { GenerationStatus } from './types'
 
-export interface TaskDto { id: string; project_id: string; provider: string; prompt: string; parent_image_id: string | null; status: GenerationStatus; progress_message: string; chat_url: string | null; image_id: string | null; error_code: string | null }
+export interface TaskDto { id: string; project_id: string; provider: string; prompt: string; parent_image_id: string | null; status: GenerationStatus; progress_message: string; chat_url: string | null; image_id: string | null; image_ids_json?: string; provider_mode?: string; error_code: string | null }
 export interface StatusDto { paired: boolean; online: boolean; state: string; chat_url: string | null; extension_version: string | null }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

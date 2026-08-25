@@ -2,6 +2,7 @@ import { Eye, EyeOff, RefreshCw, RotateCcw, Send, Square } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { getDesktopBridge } from '../desktop/desktopBridge'
+import { createGenerationTask } from './generationApi'
 
 interface ChatGptGenerationPanelProps {
   projectId: string
@@ -10,10 +11,12 @@ interface ChatGptGenerationPanelProps {
 export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProps) {
   const bridge = getDesktopBridge()
   const viewSlotRef = useRef<HTMLDivElement>(null)
+  const taskIdRef = useRef<string | null>(null)
   const [prompt, setPrompt] = useState('')
   const [viewVisible, setViewVisible] = useState(false)
   const [pending, setPending] = useState(false)
   const [taskId, setTaskId] = useState<string | null>(null)
+  const [recoverable, setRecoverable] = useState(false)
   const [message, setMessage] = useState('登录后，可在这里直接使用普通 Chat 生成图片。')
   const [error, setError] = useState<string | null>(null)
 
@@ -53,15 +56,39 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
     void bridge?.setChatGptView({ visible: false })
   }, [bridge])
 
+  useEffect(() => {
+    if (!bridge) return
+    return bridge.onGenerationEvent((generationEvent) => {
+      if (taskIdRef.current && generationEvent.taskId !== taskIdRef.current) return
+      taskIdRef.current = generationEvent.taskId
+      setTaskId(generationEvent.taskId)
+      setMessage(generationEvent.message)
+      setRecoverable(generationEvent.recoverable)
+      const active = !['completed', 'failed', 'cancelled', 'refused', 'rate_limited', 'page_changed']
+        .includes(generationEvent.state)
+      setPending(active)
+      if (generationEvent.state === 'login_required' || generationEvent.state === 'page_changed') {
+        setViewVisible(true)
+      }
+      if (generationEvent.state === 'failed' || generationEvent.state === 'refused') {
+        setError(generationEvent.message)
+      } else {
+        setError(null)
+      }
+    })
+  }, [bridge])
+
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (!bridge || !prompt.trim() || pending) return
-    const nextTaskId = globalThis.crypto?.randomUUID?.() ?? `task-${Date.now()}`
-    setTaskId(nextTaskId)
     setPending(true)
     setError(null)
     setMessage('正在把 Prompt 发送到 ChatGPT…')
     try {
+      const task = await createGenerationTask(projectId, prompt.trim())
+      const nextTaskId = task.id
+      taskIdRef.current = nextTaskId
+      setTaskId(nextTaskId)
       await bridge.startGeneration({
         taskId: nextTaskId,
         projectId,
@@ -139,7 +166,7 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
         <button type="button" disabled={!taskId || !pending} onClick={() => taskId && void bridge?.cancelGeneration(taskId)}>
           <Square size={13} />取消
         </button>
-        <button type="button" disabled={!taskId} onClick={() => taskId && void bridge?.retryCollection(taskId)}>
+        <button type="button" disabled={!taskId || !recoverable} onClick={() => taskId && void bridge?.retryCollection(taskId)}>
           <RotateCcw size={13} />重试收集图片
         </button>
       </div>

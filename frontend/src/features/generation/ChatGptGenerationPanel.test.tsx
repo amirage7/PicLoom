@@ -1,9 +1,12 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DesktopBridgeApi } from '../desktop/types'
 import { ChatGptGenerationPanel } from './ChatGptGenerationPanel'
+import * as api from './generationApi'
+
+vi.mock('./generationApi')
 
 function installBridge(): DesktopBridgeApi {
   const bridge: DesktopBridgeApi = {
@@ -19,6 +22,13 @@ function installBridge(): DesktopBridgeApi {
   return bridge
 }
 
+beforeEach(() => {
+  vi.mocked(api.createGenerationTask).mockResolvedValue({
+    id: 'task-1', project_id: 'project-1', provider: 'chatgpt-web', prompt: '一朵花',
+    parent_image_id: null, status: 'queued', progress_message: 'queued', chat_url: null,
+    image_id: null, image_ids_json: '[]', provider_mode: 'desktop', error_code: null,
+  })
+})
 afterEach(() => {
   delete window.aiImageCanvasDesktop
 })
@@ -47,9 +57,9 @@ describe('ChatGptGenerationPanel', () => {
     await user.type(screen.getByRole('textbox', { name: 'Prompt' }), '一朵花')
     await user.click(screen.getByRole('button', { name: '使用 ChatGPT 生成' }))
 
-    expect(bridge.startGeneration).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() => expect(bridge.startGeneration).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1', prompt: '一朵花', parentImageId: null,
-    }))
+    })))
   })
 
   it('reloads the persistent ChatGPT page on request', async () => {

@@ -97,4 +97,13 @@ describe('canvas store', () => {
     expect(revokeObjectURL).toHaveBeenCalledOnce()
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:fixture')
   })
+
+  it('highlights an imported batch and uses its first image for details', () => {
+    useCanvasStore.getState().selectImportedBatch('future-city', ['street-level', 'transit-hub'])
+    const canvas = useCanvasStore.getState().canvases['future-city']
+
+    expect(canvas.selectedNodeId).toBe('street-level')
+    expect(canvas.nodes.filter((node) => node.selected).map((node) => node.id))
+      .toEqual(['street-level', 'transit-hub'])
+  })
 })

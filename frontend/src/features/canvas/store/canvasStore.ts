@@ -110,6 +110,7 @@ interface CanvasStore {
   applyNodeChanges: (projectId: string, changes: NodeChange<CanvasNode>[]) => void
   applyEdgeChanges: (projectId: string, changes: EdgeChange[]) => void
   selectNode: (projectId: string, nodeId: string | null) => void
+  selectImportedBatch: (projectId: string, nodeIds: string[]) => void
   connectNodes: (projectId: string, connection: Connection) => void
   addUploadedImages: (projectId: string, files: readonly File[], position: XYPosition) => string[]
   duplicateNode: (projectId: string, nodeId: string) => string | null
@@ -150,6 +151,19 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       nodes: canvas.nodes.map((node) => ({ ...node, selected: node.id === nodeId })),
     })),
   })),
+  selectImportedBatch: (projectId, nodeIds) => {
+    const requested = new Set(nodeIds)
+    set((state) => ({
+      canvases: updateCanvas(state.canvases, projectId, (canvas) => {
+        const first = nodeIds.find((id) => canvas.nodes.some((node) => node.id === id)) ?? null
+        return {
+          ...canvas,
+          selectedNodeId: first,
+          nodes: canvas.nodes.map((node) => ({ ...node, selected: requested.has(node.id) })),
+        }
+      }),
+    }))
+  },
   connectNodes: (projectId, connection) => {
     const { source, target } = connection
     if (!source || !target || source === target) return
