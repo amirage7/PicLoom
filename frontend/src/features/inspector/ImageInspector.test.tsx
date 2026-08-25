@@ -110,8 +110,14 @@ describe('ImageInspector', () => {
     render(<ImageInspector />)
     await user.click(screen.getByRole('button', { name: '查看原图' }))
     expect(screen.getByRole('dialog', { name: '查看 city-overview.webp' })).toBeInTheDocument()
+    expect(screen.getByText('适应')).toBeInTheDocument()
+    expect(screen.getByTestId('original-image')).toHaveAttribute('data-fit', 'true')
     await user.click(screen.getByRole('button', { name: '放大' }))
     expect(screen.getByText('125%')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '关闭原图' }))
+    await user.click(screen.getByRole('button', { name: '查看原图' }))
+    expect(screen.getByText('适应')).toBeInTheDocument()
+    expect(screen.getByTestId('original-image')).toHaveAttribute('data-fit', 'true')
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '保存原图' }))
     await waitFor(() => expect(saveImage).toHaveBeenCalledWith({
       imageId: 'city-overview', fileName: 'city-overview.webp',

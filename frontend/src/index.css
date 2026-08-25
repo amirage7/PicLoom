@@ -183,8 +183,9 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .image-viewer header > div { display: flex; align-items: center; gap: 7px; }
 .image-viewer header button { display: inline-flex; min-width: 34px; height: 32px; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; color: var(--muted); background: var(--panel-raised); border: 1px solid var(--border); border-radius: 7px; cursor: pointer; }
 .image-viewer header span { min-width: 48px; color: var(--muted); font-size: 11px; text-align: center; }
-.image-viewer-stage { overflow: auto; display: flex; align-items: flex-start; justify-content: center; padding: 28px; }
+.image-viewer-stage { overflow: auto; display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: 28px; }
 .image-viewer-stage img { display: block; max-width: none; height: auto; min-width: 1px; object-fit: contain; box-shadow: 0 12px 50px oklch(0 0 0 / 0.5); }
+.image-viewer-stage img.is-fit { width: auto; max-width: 100%; max-height: 100%; }
 .inspector-section { padding: 15px 16px; border-top: 1px solid var(--border); }
 .inspector-section-title { display: flex; min-height: 24px; align-items: center; justify-content: space-between; margin-bottom: 9px; color: var(--muted); font-size: 10px; }
 .inspector-section-title > span, .inspector-section-title > button { display: flex; align-items: center; gap: 6px; }

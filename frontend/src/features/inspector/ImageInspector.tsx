@@ -35,7 +35,7 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
   const [copied, setCopied] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [viewerOpen, setViewerOpen] = useState(false)
-  const [zoom, setZoom] = useState(100)
+  const [zoom, setZoom] = useState<'fit' | number>('fit')
   const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -47,7 +47,7 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
     setCopied(false)
     setConfirmingDelete(false)
     setViewerOpen(false)
-    setZoom(100)
+    setZoom('fit')
     setSaveError(null)
   }, [selected?.id, selected?.data.image.name, selected?.data.image.prompt, selected?.data.image.tags])
 
@@ -55,8 +55,12 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
     if (!viewerOpen) return
     const close = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setViewerOpen(false)
-      if (event.key === '+' || event.key === '=') setZoom((value) => Math.min(400, value + 25))
-      if (event.key === '-') setZoom((value) => Math.max(25, value - 25))
+      if (event.key === '+' || event.key === '=') {
+        setZoom((value) => value === 'fit' ? 125 : Math.min(400, value + 25))
+      }
+      if (event.key === '-') {
+        setZoom((value) => value === 'fit' ? value : Math.max(25, value - 25))
+      }
     }
     window.addEventListener('keydown', close)
     return () => window.removeEventListener('keydown', close)
@@ -152,7 +156,7 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
         </>
       ) : (
         <div className="inspector-content">
-          <button className="inspector-image" type="button" aria-label="查看原图" onClick={() => setViewerOpen(true)}>
+          <button className="inspector-image" type="button" aria-label="查看原图" onClick={() => { setZoom('fit'); setViewerOpen(true) }}>
             <img src={selected.data.image.imageUrl} alt={selected.data.image.fileName} />
             <span><Expand size={14} />查看原图</span>
           </button>
@@ -213,9 +217,10 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
           <header>
             <strong>{selected.data.image.fileName}</strong>
             <div>
-              <button type="button" aria-label="缩小" onClick={() => setZoom((value) => Math.max(25, value - 25))}><Minus size={16} /></button>
-              <span>{zoom}%</span>
-              <button type="button" aria-label="放大" onClick={() => setZoom((value) => Math.min(400, value + 25))}><Plus size={16} /></button>
+              <button type="button" aria-label="缩小" onClick={() => setZoom((value) => value === 'fit' ? value : Math.max(25, value - 25))}><Minus size={16} /></button>
+              <span>{zoom === 'fit' ? '适应' : `${zoom}%`}</span>
+              <button type="button" aria-label="放大" onClick={() => setZoom((value) => value === 'fit' ? 125 : Math.min(400, value + 25))}><Plus size={16} /></button>
+              <button type="button" onClick={() => setZoom('fit')}>适应窗口</button>
               <button type="button" onClick={() => setZoom(100)}>100%</button>
               <button type="button" onClick={() => void saveOriginal()}><Download size={15} />保存原图</button>
               <button type="button" aria-label="关闭原图" onClick={() => setViewerOpen(false)}><X size={17} /></button>
@@ -223,9 +228,19 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
           </header>
           <div className="image-viewer-stage" onWheel={(event) => {
             event.preventDefault()
-            setZoom((value) => Math.max(25, Math.min(400, value + (event.deltaY < 0 ? 25 : -25))))
+            setZoom((value) => {
+              if (value === 'fit') return event.deltaY < 0 ? 125 : value
+              return Math.max(25, Math.min(400, value + (event.deltaY < 0 ? 25 : -25)))
+            })
           }}>
-            <img src={selected.data.image.imageUrl} alt={selected.data.image.fileName} style={{ width: `${zoom}%` }} />
+            <img
+              data-testid="original-image"
+              data-fit={zoom === 'fit' ? 'true' : 'false'}
+              className={zoom === 'fit' ? 'is-fit' : undefined}
+              src={selected.data.image.imageUrl}
+              alt={selected.data.image.fileName}
+              style={zoom === 'fit' ? undefined : { width: `${zoom}%` }}
+            />
           </div>
         </div>
       )}
