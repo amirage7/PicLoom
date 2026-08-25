@@ -45,6 +45,7 @@ def test_extension_upload_completes_task_and_creates_image(client, image_bytes, 
     assert completed["image_id"]
     images = client.get(f"/api/projects/{project_id}/images").json()
     assert len(images) == 1
+    assert images[0]["name"] == "quiet tower"
     assert images[0]["prompt"] == "quiet tower"
     assert (data_root / images[0]["image_path"]).is_file()
 

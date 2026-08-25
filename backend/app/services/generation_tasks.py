@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.entities import Image, Project
+from app.services.image_names import allocate_image_name, preferred_image_name
 from app.services.image_storage import store_image
 from app.models.generation import GenerationTask
 from app.services.resources import ResourceNotFoundError
@@ -147,11 +148,17 @@ def complete_with_image(
     if task.status != "downloading":
         raise InvalidTaskTransition("任务尚未进入图片下载阶段")
     stored = store_image(data_dir / "images", task.project_id, content)
+    file_name = f"chatgpt-{task.id}{stored.suffix}"
+    name, name_key = allocate_image_name(
+        session, task.project_id, preferred_image_name(task.prompt, file_name)
+    )
     image = Image(
         id=str(uuid4()),
         project_id=task.project_id,
         image_path=stored.relative_to(data_dir).as_posix(),
-        file_name=f"chatgpt-{task.id}{stored.suffix}",
+        file_name=file_name,
+        name=name,
+        name_key=name_key,
         prompt=task.prompt,
         tags_json=[],
         parent_id=task.parent_image_id,
