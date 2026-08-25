@@ -51,7 +51,7 @@ async function createApplicationWindow(): Promise<void> {
   })
   await backendSupervisor.start()
 
-  const preloadPath = fileURLToPath(new URL('./preload.js', import.meta.url))
+  const preloadPath = fileURLToPath(new URL('./preload.cjs', import.meta.url))
   mainWindow = new BrowserWindow(createMainWindowOptions(preloadPath))
   installSessionSecurity(mainWindow.webContents.session)
   installNavigationSecurity(mainWindow.webContents, isAllowedRendererUrl, shell.openExternal)
