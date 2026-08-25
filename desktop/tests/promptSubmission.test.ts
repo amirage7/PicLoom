@@ -37,6 +37,7 @@ describe('ChatGPT prompt submission', () => {
     const executeJavaScript = vi.fn(async () => ({
       kind: 'submitted',
       assistantResponseIdsBefore: ['assistant-1', 'assistant-2'],
+      imageSourcesBefore: ['https://chatgpt.com/existing.webp'],
     }))
     const webContents = {
       executeJavaScript,
@@ -48,6 +49,7 @@ describe('ChatGPT prompt submission', () => {
     expect(receipt).toMatchObject({
       conversationUrlBefore: 'https://chatgpt.com/c/example',
       assistantResponseIdsBefore: ['assistant-1', 'assistant-2'],
+      imageSourcesBefore: ['https://chatgpt.com/existing.webp'],
     })
     expect(receipt.submittedAt).toEqual(expect.any(Number))
     expect(executeJavaScript).toHaveBeenCalledOnce()
@@ -88,6 +90,7 @@ describe('ChatGPT prompt submission', () => {
 
     expect(button.clicked).toBe(true)
     expect(result).toMatchObject({ kind: 'submitted' })
+    expect(result).toMatchObject({ imageSourcesBefore: [] })
   })
   it('uses native value setters and verifies a real send instead of claiming an Enter fallback', () => {
     const script = createPromptSubmissionScript('a "quoted" prompt')

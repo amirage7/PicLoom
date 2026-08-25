@@ -20,6 +20,7 @@ function harness(states: PageState[]) {
   const submit = vi.fn(async () => ({
     conversationUrlBefore: 'https://chatgpt.com/c/test',
     assistantResponseIdsBefore: ['old-response'],
+    imageSourcesBefore: ['https://chatgpt.com/existing.webp'],
     submittedAt: 1,
   }))
   const collect = vi.fn(async (): Promise<CollectedImage[]> => [

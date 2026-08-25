@@ -40,6 +40,21 @@ describe('versioned ChatGPT page adapter', () => {
     })
   })
 
+  it('detects a new large result image without legacy ChatGPT labels', () => {
+    const inspectWithImageBaseline = inspectFixtureHtml as (
+      html: string, assistantIds: string[], imageSources: string[]
+    ) => ReturnType<typeof inspectFixtureHtml>
+
+    expect(inspectWithImageBaseline(
+      fixture('completed-unmarked-large-image.html'),
+      [],
+      ['https://chatgpt.com/existing.webp'],
+    )).toEqual({
+      kind: 'completed',
+      images: [{ src: 'https://files.oaiusercontent.com/new-result.webp', alt: '' }],
+    })
+  })
+
   it('distinguishes refusal, rate limit, and unknown layouts', () => {
     expect(inspectFixtureHtml(fixture('refusal.html'), [])).toEqual({
       kind: 'refused',
@@ -57,7 +72,7 @@ describe('versioned ChatGPT page adapter', () => {
   it('emits a serializable page script without session-secret access', () => {
     const script = createInspectPageScript(['assistant-old'])
 
-    expect(CHATGPT_ADAPTER_VERSION).toBe('2026-08-25.1')
+    expect(CHATGPT_ADAPTER_VERSION).toBe('2026-08-25.2')
     expect(script).toContain('assistant-old')
     expect(script).not.toMatch(/cookie|localStorage|sessionStorage/i)
     expect(JSON.parse(JSON.stringify(inspectFixtureHtml(

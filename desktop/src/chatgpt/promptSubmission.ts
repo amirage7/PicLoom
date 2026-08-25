@@ -1,6 +1,7 @@
 export interface SubmissionReceipt {
   conversationUrlBefore: string
   assistantResponseIdsBefore: string[]
+  imageSourcesBefore: string[]
   submittedAt: number
 }
 
@@ -26,7 +27,7 @@ interface SubmissionWebContents {
 }
 
 type RuntimeSubmissionResult =
-  | { kind: 'submitted'; assistantResponseIdsBefore: string[] }
+  | { kind: 'submitted'; assistantResponseIdsBefore: string[]; imageSourcesBefore: string[] }
   | { kind: 'login_required' }
   | { kind: 'composer_missing' }
   | { kind: 'send_unavailable' }
@@ -47,6 +48,11 @@ async function runtimeSubmitPrompt(prompt: string): Promise<RuntimeSubmissionRes
   const assistantResponseIdsBefore = Array.from(document.querySelectorAll<HTMLElement>(
     '[data-message-author-role="assistant"]',
   )).map((response, index) => response.dataset.messageId || response.id || `assistant-index-${index}`)
+  const imageSourcesBefore = Array.from(document.querySelectorAll<HTMLImageElement>('img'))
+    .filter((image) => image.naturalWidth >= 256 && image.naturalHeight >= 256)
+    .map((image) => image.currentSrc || image.src)
+    .filter((source) => /^(blob:|data:image\/|https:\/\/)/i.test(source))
+
 
   composer.focus()
   if (composer instanceof HTMLTextAreaElement) {
@@ -83,7 +89,7 @@ async function runtimeSubmitPrompt(prompt: string): Promise<RuntimeSubmissionRes
         ? currentComposer.value
         : currentComposer?.textContent ?? ''
       if (currentUserCount > userResponseCountBefore || content.trim() === '') {
-        return { kind: 'submitted', assistantResponseIdsBefore }
+        return { kind: 'submitted', assistantResponseIdsBefore, imageSourcesBefore }
       }
     }
     return { kind: 'submission_unconfirmed' }
@@ -102,6 +108,8 @@ function isRuntimeResult(value: unknown): value is RuntimeSubmissionResult {
     return (
       Array.isArray(result.assistantResponseIdsBefore)
       && result.assistantResponseIdsBefore.every((id) => typeof id === 'string')
+      && Array.isArray(result.imageSourcesBefore)
+      && result.imageSourcesBefore.every((source) => typeof source === 'string')
     )
   }
   return ['login_required', 'composer_missing', 'send_unavailable', 'submission_unconfirmed'].includes(result.kind ?? '')
@@ -137,6 +145,7 @@ export async function submitPrompt(
   return {
     conversationUrlBefore,
     assistantResponseIdsBefore: result.assistantResponseIdsBefore,
+    imageSourcesBefore: result.imageSourcesBefore,
     submittedAt: Date.now(),
   }
 }

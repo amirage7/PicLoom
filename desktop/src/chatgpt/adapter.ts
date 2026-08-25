@@ -1,4 +1,4 @@
-export const CHATGPT_ADAPTER_VERSION = '2026-08-25.1'
+export const CHATGPT_ADAPTER_VERSION = '2026-08-25.2'
 
 export type PageState =
   | { kind: 'login_required'; reason: string }
@@ -42,9 +42,28 @@ function generatedImages(html: string): Array<{ src: string; alt: string }> {
   return images
 }
 
+function newLargeImages(html: string, imageSourcesBefore: string[]): Array<{ src: string; alt: string }> {
+  const baseline = new Set(imageSourcesBefore)
+  const images: Array<{ src: string; alt: string }> = []
+  const pattern = /<img\b([^>]*)>/gi
+  for (const match of html.matchAll(pattern)) {
+    const attributes = match[1] ?? ''
+    const src = attribute(attributes, 'src')
+    const width = Number(attribute(attributes, 'width') ?? 0)
+    const height = Number(attribute(attributes, 'height') ?? 0)
+    if (
+      !src || baseline.has(src) || width < 256 || height < 256
+      || !/^(blob:|data:image\/|https:\/\/)/i.test(src)
+    ) continue
+    images.push({ src, alt: attribute(attributes, 'alt') ?? '' })
+  }
+  return images
+}
+
 export function inspectFixtureHtml(
   html: string,
   assistantResponseIdsBefore: string[],
+  imageSourcesBefore: string[] = [],
 ): PageState {
   if (/data-testid=["']login-button["']|href=["'][^"']*auth\/login/i.test(html)) {
     return { kind: 'login_required', reason: 'ChatGPT login is required' }
@@ -69,6 +88,8 @@ export function inspectFixtureHtml(
     })
     .flatMap((article) => generatedImages(article.body))
   if (images.length > 0) return { kind: 'completed', images }
+  const unmarkedImages = newLargeImages(html, imageSourcesBefore)
+  if (unmarkedImages.length > 0) return { kind: 'completed', images: unmarkedImages }
 
   if (/id=["']prompt-textarea["']|data-testid=["']composer/i.test(html)) {
     return { kind: 'ready' }
@@ -79,7 +100,10 @@ export function inspectFixtureHtml(
   }
 }
 
-function runtimeInspectPage(assistantResponseIdsBefore: string[]): PageState {
+function runtimeInspectPage(
+  assistantResponseIdsBefore: string[],
+  imageSourcesBefore: string[],
+): PageState {
   const login = document.querySelector(
     '[data-testid="login-button"], a[href*="/auth/login"], button[data-testid*="login"]',
   )
@@ -120,6 +144,21 @@ function runtimeInspectPage(assistantResponseIdsBefore: string[]): PageState {
     .filter((image) => /^(blob:|data:image\/|https:\/\/)/i.test(image.src))
   if (images.length > 0) return { kind: 'completed', images }
 
+  const imageBaseline = new Set(imageSourcesBefore)
+  const unmarkedImages = Array.from(document.querySelectorAll<HTMLImageElement>('img'))
+    .map((image) => ({
+      src: image.currentSrc || image.src,
+      alt: image.alt || '',
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+    }))
+    .filter((image) => (
+      image.width >= 256 && image.height >= 256 && !imageBaseline.has(image.src)
+      && /^(blob:|data:image\/|https:\/\/)/i.test(image.src)
+    ))
+    .map(({ src, alt }) => ({ src, alt }))
+  if (unmarkedImages.length > 0) return { kind: 'completed', images: unmarkedImages }
+
   const composer = document.querySelector(
     '#prompt-textarea, textarea[data-testid*="composer"], [contenteditable="true"][data-testid*="composer"]',
   )
@@ -131,8 +170,11 @@ function runtimeInspectPage(assistantResponseIdsBefore: string[]): PageState {
   }
 }
 
-export function createInspectPageScript(assistantResponseIdsBefore: string[]): string {
-  return `(${runtimeInspectPage.toString()})(${JSON.stringify(assistantResponseIdsBefore)})`
+export function createInspectPageScript(
+  assistantResponseIdsBefore: string[],
+  imageSourcesBefore: string[] = [],
+): string {
+  return `(${runtimeInspectPage.toString()})(${JSON.stringify(assistantResponseIdsBefore)}, ${JSON.stringify(imageSourcesBefore)})`
 }
 
 interface InspectableWebContents {
@@ -159,8 +201,9 @@ function isPageState(value: unknown): value is PageState {
 export async function inspectChatGptPage(
   webContents: InspectableWebContents,
   assistantResponseIdsBefore: string[],
+  imageSourcesBefore: string[] = [],
 ): Promise<PageState> {
-  const result = await webContents.executeJavaScript(createInspectPageScript(assistantResponseIdsBefore))
+  const result = await webContents.executeJavaScript(createInspectPageScript(assistantResponseIdsBefore, imageSourcesBefore))
   if (!isPageState(result)) {
     return {
       kind: 'page_changed',

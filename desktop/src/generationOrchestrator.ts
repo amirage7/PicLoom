@@ -39,7 +39,7 @@ interface OrchestratorBackend {
 
 interface GenerationOrchestratorOptions {
   view: OrchestratorView
-  inspect(webContents: AutomationWebContents, assistantResponseIdsBefore: string[]): Promise<PageState>
+  inspect(webContents: AutomationWebContents, assistantResponseIdsBefore: string[], imageSourcesBefore: string[]): Promise<PageState>
   submit(webContents: AutomationWebContents, prompt: string): Promise<SubmissionReceipt>
   collect(sources: ImageSource[], webContents: AutomationWebContents, signal: AbortSignal): Promise<CollectedImage[]>
   backend: OrchestratorBackend
@@ -157,6 +157,7 @@ export class GenerationOrchestrator {
       receipt: {
         conversationUrlBefore: '',
         assistantResponseIdsBefore: [],
+        imageSourcesBefore: [],
         submittedAt: 0,
       },
       batchId: this.options.createBatchId?.() ?? randomUUID(),
@@ -171,7 +172,7 @@ export class GenerationOrchestrator {
       await this.transition(task, 'opening_chatgpt')
       await this.options.view.loadHome()
       const webContents = this.options.view.getWebContents()
-      let initialState = await this.options.inspect(webContents, [])
+      let initialState = await this.options.inspect(webContents, [], [])
       let composerAttempts = 0
       while (initialState.kind === 'login_required' || initialState.kind === 'page_changed') {
         if (initialState.kind === 'login_required') {
@@ -184,7 +185,7 @@ export class GenerationOrchestrator {
           await this.waitFor(500, task.controller.signal)
         }
         cancelled(task.controller.signal)
-        initialState = await this.options.inspect(webContents, [])
+        initialState = await this.options.inspect(webContents, [], [])
       }
       if (initialState.kind !== 'ready') {
         await this.finishPageState(task, initialState)
@@ -216,6 +217,7 @@ export class GenerationOrchestrator {
       const pageState = await this.options.inspect(
         this.options.view.getWebContents(),
         task.receipt.assistantResponseIdsBefore,
+        task.receipt.imageSourcesBefore,
       )
       if (pageState.kind === 'generating' || pageState.kind === 'ready') {
         await this.waitFor(elapsed < 30_000 ? 750 : 2_000, task.controller.signal)
@@ -306,6 +308,7 @@ export class GenerationOrchestrator {
       const state = await this.options.inspect(
         this.options.view.getWebContents(),
         task.receipt.assistantResponseIdsBefore,
+        task.receipt.imageSourcesBefore,
       )
       if (state.kind !== 'completed') {
         await this.finishPageState(task, state)
