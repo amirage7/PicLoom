@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { runInNewContext } from 'node:vm'
 
 import {
   PromptSubmissionError,
@@ -52,14 +53,51 @@ describe('ChatGPT prompt submission', () => {
     expect(executeJavaScript).toHaveBeenCalledOnce()
   })
 
-  it('uses native value setters, input events, send click, and a guarded Enter fallback', () => {
+
+  it('waits for the send button to become enabled and confirms the click', async () => {
+    const button = {
+      disabled: true,
+      clicked: false,
+      getAttribute: () => null,
+      click() {
+        this.clicked = true
+        composer.textContent = ''
+      },
+    }
+    const composer = {
+      textContent: '',
+      focus: vi.fn(),
+      getAttribute: (name: string) => name === 'contenteditable' ? 'true' : null,
+      dispatchEvent(event: { type: string }) {
+        if (event.type === 'input') setTimeout(() => { button.disabled = false }, 0)
+        return true
+      },
+    }
+    class PageEvent { constructor(readonly type: string) {} }
+    const result = await runInNewContext(createPromptSubmissionScript('delayed send'), {
+      document: {
+        querySelector: (selector: string) => selector.includes('prompt-textarea') ? composer : null,
+        querySelectorAll: (selector: string) => selector.includes('send-button') ? [button] : [],
+      },
+      HTMLTextAreaElement: class {},
+      HTMLInputElement: class {},
+      Event: PageEvent,
+      KeyboardEvent: PageEvent,
+      setTimeout,
+    })
+
+    expect(button.clicked).toBe(true)
+    expect(result).toMatchObject({ kind: 'submitted' })
+  })
+  it('uses native value setters and verifies a real send instead of claiming an Enter fallback', () => {
     const script = createPromptSubmissionScript('a "quoted" prompt')
 
     expect(script).toContain('HTMLTextAreaElement')
     expect(script).toMatch(/new Event\(["']input["']/)
     expect(script).toMatch(/new Event\(["']change["']/)
     expect(script).toContain('sendButton.click()')
-    expect(script).toMatch(/new KeyboardEvent\(["']keydown["']/)
+    expect(script).toContain('submission_unconfirmed')
+    expect(script).not.toContain('new KeyboardEvent')
     expect(script).toContain('a \\"quoted\\" prompt')
     expect(script).not.toMatch(/cookie|localStorage|sessionStorage/i)
   })

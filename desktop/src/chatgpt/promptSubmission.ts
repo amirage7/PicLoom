@@ -30,9 +30,10 @@ type RuntimeSubmissionResult =
   | { kind: 'login_required' }
   | { kind: 'composer_missing' }
   | { kind: 'send_unavailable' }
+  | { kind: 'submission_unconfirmed' }
 
 
-function runtimeSubmitPrompt(prompt: string): RuntimeSubmissionResult {
+async function runtimeSubmitPrompt(prompt: string): Promise<RuntimeSubmissionResult> {
   const login = document.querySelector(
     '[data-testid="login-button"], a[href*="/auth/login"], button[data-testid*="login"]',
   )
@@ -60,26 +61,32 @@ function runtimeSubmitPrompt(prompt: string): RuntimeSubmissionResult {
   composer.dispatchEvent(new Event('input', { bubbles: true }))
   composer.dispatchEvent(new Event('change', { bubbles: true }))
 
-  const sendButton = Array.from(document.querySelectorAll<HTMLButtonElement>(
-    'button[data-testid="send-button"], button[aria-label*="Send"], button[data-testid*="send"]',
-  )).find((button) => !button.disabled && button.getAttribute('aria-disabled') !== 'true')
-  if (sendButton) {
-    sendButton.click()
-    return { kind: 'submitted', assistantResponseIdsBefore }
-  }
+  const userResponseCountBefore = document.querySelectorAll('[data-message-author-role="user"]').length
+  const delay = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const sendButton = Array.from(document.querySelectorAll<HTMLButtonElement>(
+      'button[data-testid="send-button"], button[aria-label*="Send"], button[data-testid*="send"]',
+    )).find((button) => !button.disabled && button.getAttribute('aria-disabled') !== 'true')
+    if (!sendButton) {
+      await delay(50)
+      continue
+    }
 
-  const enterCanSubmit = (
-    composer.getAttribute('contenteditable') === 'true'
-    && composer.getAttribute('data-enter-behavior') !== 'newline'
-  )
-  if (enterCanSubmit) {
-    composer.dispatchEvent(new KeyboardEvent('keydown', {
-      key: 'Enter',
-      code: 'Enter',
-      bubbles: true,
-      cancelable: true,
-    }))
-    return { kind: 'submitted', assistantResponseIdsBefore }
+    sendButton.click()
+    for (let confirmation = 0; confirmation < 20; confirmation += 1) {
+      await delay(100)
+      const currentUserCount = document.querySelectorAll('[data-message-author-role="user"]').length
+      const currentComposer = document.querySelector<HTMLElement>(
+        '#prompt-textarea, textarea[data-testid*="composer"], [contenteditable="true"][data-testid*="composer"]',
+      )
+      const content = currentComposer instanceof HTMLTextAreaElement || currentComposer instanceof HTMLInputElement
+        ? currentComposer.value
+        : currentComposer?.textContent ?? ''
+      if (currentUserCount > userResponseCountBefore || content.trim() === '') {
+        return { kind: 'submitted', assistantResponseIdsBefore }
+      }
+    }
+    return { kind: 'submission_unconfirmed' }
   }
   return { kind: 'send_unavailable' }
 }
@@ -97,7 +104,7 @@ function isRuntimeResult(value: unknown): value is RuntimeSubmissionResult {
       && result.assistantResponseIdsBefore.every((id) => typeof id === 'string')
     )
   }
-  return ['login_required', 'composer_missing', 'send_unavailable'].includes(result.kind ?? '')
+  return ['login_required', 'composer_missing', 'send_unavailable', 'submission_unconfirmed'].includes(result.kind ?? '')
 }
 
 export async function submitPrompt(
@@ -122,6 +129,9 @@ export async function submitPrompt(
   }
   if (result.kind === 'send_unavailable') {
     throw new PromptSubmissionError('submission_failed', 'ChatGPT send control is unavailable')
+  }
+  if (result.kind === 'submission_unconfirmed') {
+    throw new PromptSubmissionError('submission_failed', 'ChatGPT did not confirm prompt submission')
   }
 
   return {
