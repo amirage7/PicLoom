@@ -7,6 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import Image, Project
 from app.schemas.images import ImageUpdate
+from app.services.image_names import (
+    allocate_image_name,
+    preferred_image_name,
+    require_available_image_name,
+)
 from app.services.image_storage import duplicate_image, remove_image, resolve_stored_path, store_image
 from app.services.resources import ResourceNotFoundError
 
@@ -22,6 +27,7 @@ def serialize_image(image: Image) -> dict:
         "image_path": image.image_path,
         "image_url": f"/media/{image.image_path.replace('\\', '/')}",
         "file_name": image.file_name,
+        "name": image.name,
         "prompt": image.prompt,
         "tags": image.tags_json,
         "parent_id": image.parent_id,
@@ -54,6 +60,9 @@ def create_image(
     if session.get(Project, project_id) is None:
         raise ResourceNotFoundError("项目不存在")
     image_id = str(uuid4())
+    name, name_key = allocate_image_name(
+        session, project_id, preferred_image_name("", file_name)
+    )
     if parent_id is not None:
         validate_parent(session, image_id, project_id, parent_id)
     stored = store_image(data_dir / "images", project_id, content)
@@ -63,6 +72,8 @@ def create_image(
         project_id=project_id,
         image_path=relative,
         file_name=Path(file_name).name[:255] or "image",
+        name=name,
+        name_key=name_key,
         prompt=prompt,
         tags_json=[],
         parent_id=parent_id,
@@ -113,6 +124,10 @@ def update_image(session: Session, image_id: str, payload: ImageUpdate) -> dict:
     fields = payload.model_fields_set
     if "parent_id" in fields and payload.parent_id is not None:
         validate_parent(session, image.id, image.project_id, payload.parent_id)
+    if "name" in fields:
+        image.name, image.name_key = require_available_image_name(
+            session, image.project_id, payload.name or "", exclude_id=image.id
+        )
     if "prompt" in fields:
         image.prompt = payload.prompt or ""
     if "tags" in fields:
@@ -132,11 +147,14 @@ def copy_image(session: Session, data_dir: Path, image_id: str) -> dict:
     if source is None:
         raise ResourceNotFoundError("图片不存在")
     stored = duplicate_image(data_dir / "images", source.project_id, resolve_stored_path(data_dir, source.image_path))
+    name, name_key = allocate_image_name(session, source.project_id, f"{source.name} 副本")
     duplicate = Image(
         id=str(uuid4()),
         project_id=source.project_id,
         image_path=stored.relative_to(data_dir).as_posix(),
         file_name=source.file_name,
+        name=name,
+        name_key=name_key,
         prompt=source.prompt,
         tags_json=list(source.tags_json),
         parent_id=None,

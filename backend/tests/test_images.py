@@ -17,6 +17,7 @@ def test_upload_persists_verified_png(client: TestClient, image_bytes, data_root
     body = upload_image(client, image_bytes)
     assert body["image_url"].startswith("/media/images/future-city/")
     assert body["file_name"] == "source.png"
+    assert body["name"] == "source"
     assert body["position_x"] == 40
     assert (data_root / body["image_path"]).is_file()
     assert client.get(body["image_url"]).status_code == 200
@@ -58,11 +59,35 @@ def test_duplicate_copies_file_and_delete_cleans_source(client: TestClient, imag
     copy = duplicated.json()
     assert copy["id"] != source["id"]
     assert copy["image_path"] != source["image_path"]
+    assert copy["name"] == "source 副本"
     assert copy["position_x"] == source["position_x"] + 60
     assert (data_root / copy["image_path"]).exists()
     assert client.delete(f"/api/images/{source['id']}").status_code == 204
     assert not (data_root / source["image_path"]).exists()
     assert (data_root / copy["image_path"]).exists()
+
+
+def test_image_name_is_editable_and_unique_per_project(client: TestClient, image_bytes) -> None:
+    first = upload_image(client, image_bytes, "future-city")
+    second = upload_image(client, image_bytes, "future-city")
+    other_project = upload_image(client, image_bytes, "architecture")
+
+    renamed = client.patch(f"/api/images/{first['id']}", json={"name": "假面骑士Build"})
+    conflict = client.patch(f"/api/images/{second['id']}", json={"name": " 假面骑士build "})
+    reused = client.patch(f"/api/images/{other_project['id']}", json={"name": "假面骑士build"})
+
+    assert renamed.status_code == 200
+    assert renamed.json()["name"] == "假面骑士Build"
+    assert conflict.status_code == 409
+    assert "同名" in conflict.json()["detail"]
+    assert reused.status_code == 200
+
+
+def test_image_name_rejects_empty_and_overlong_values(client: TestClient, image_bytes) -> None:
+    image = upload_image(client, image_bytes)
+
+    assert client.patch(f"/api/images/{image['id']}", json={"name": "   "}).status_code == 422
+    assert client.patch(f"/api/images/{image['id']}", json={"name": "图" * 81}).status_code == 422
 
 
 def test_list_images_returns_project_only(client: TestClient, image_bytes) -> None:

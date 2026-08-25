@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ImageUpdate(BaseModel):
+    name: str | None = None
     prompt: str | None = None
     tags: list[str] | None = None
     parent_id: str | None = None
@@ -19,6 +20,7 @@ class ImageResponse(BaseModel):
     image_path: str
     image_url: str
     file_name: str
+    name: str
     prompt: str
     tags: list[str]
     parent_id: str | None

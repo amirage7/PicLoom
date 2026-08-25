@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, JSON, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, JSON, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -25,11 +25,16 @@ class Project(Base):
 
 class Image(Base):
     __tablename__ = "images"
+    __table_args__ = (
+        Index("ux_images_project_name_key", "project_id", "name_key", unique=True),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=False)
     image_path: Mapped[str] = mapped_column(String(512), nullable=False, unique=True)
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    name_key: Mapped[str] = mapped_column(String(80), nullable=False)
     prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
     tags_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     parent_id: Mapped[str | None] = mapped_column(ForeignKey("images.id", ondelete="SET NULL"), nullable=True, index=True)

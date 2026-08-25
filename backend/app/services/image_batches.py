@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import Image
 from app.models.generation import GenerationTask
+from app.services.image_names import available_name_from_keys, preferred_image_name
 from app.services.image_storage import (
     FORMAT_EXTENSIONS,
     ImageStorageError,
@@ -143,17 +144,26 @@ def complete_task(
 
     try:
         now = datetime.now(timezone.utc)
+        used_name_keys = set(session.scalars(
+            select(Image.name_key).where(Image.project_id == task.project_id)
+        ))
         for index, item in enumerate(unique_new):
             image_id = str(uuid4())
             staged_path = staging / f"{image_id}{item.extension}"
             staged_path.write_bytes(item.content)
             final_path = project_dir / staged_path.name
             x, y = positions[index]
+            name, name_key = available_name_from_keys(
+                preferred_image_name(task.prompt, item.file_name), used_name_keys
+            )
+            used_name_keys.add(name_key)
             image = Image(
                 id=image_id,
                 project_id=task.project_id,
                 image_path=final_path.relative_to(data_dir).as_posix(),
                 file_name=item.file_name[:255] or f"chatgpt{item.extension}",
+                name=name,
+                name_key=name_key,
                 prompt=task.prompt,
                 tags_json=[],
                 parent_id=task.parent_image_id,

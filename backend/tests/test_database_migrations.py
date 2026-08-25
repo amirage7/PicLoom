@@ -80,3 +80,44 @@ def test_desktop_generation_states_are_validated(state: str) -> None:
     assert DesktopTaskStateUpdate(state=state, message="progress").state == state
     with pytest.raises(ValidationError):
         DesktopTaskStateUpdate(state="unknown", message="progress")
+
+def test_image_name_migration_backfills_unique_rows_idempotently(tmp_path: Path) -> None:
+    engine = build_engine(f"sqlite:///{(tmp_path / 'old-images.sqlite').as_posix()}")
+    with engine.begin() as connection:
+        connection.execute(text(
+            """
+            CREATE TABLE images (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                image_path TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                tags_json JSON NOT NULL,
+                parent_id TEXT NULL,
+                position_x FLOAT NOT NULL,
+                position_y FLOAT NOT NULL,
+                created_time DATETIME NOT NULL
+            )
+            """
+        ))
+        connection.execute(text(
+            """
+            INSERT INTO images VALUES
+            ('one', 'project', 'one.png', 'one.png', '生成一张喜羊羊', '[]', NULL, 0, 0, '2026-08-01'),
+            ('two', 'project', 'two.png', 'two.png', '生成一张喜羊羊', '[]', NULL, 0, 0, '2026-08-02'),
+            ('three', 'project', 'three.png', 'three.png', '', '[]', NULL, 0, 0, '2026-08-03')
+            """
+        ))
+
+    run_additive_migrations(engine)
+    run_additive_migrations(engine)
+
+    columns = {column["name"] for column in inspect(engine).get_columns("images")}
+    assert {"name", "name_key"} <= columns
+    with engine.connect() as connection:
+        rows = connection.execute(text(
+            "SELECT name, name_key FROM images ORDER BY created_time"
+        )).all()
+        indexes = inspect(connection).get_indexes("images")
+    assert rows == [("喜羊羊", "喜羊羊"), ("喜羊羊 (2)", "喜羊羊 (2)"), ("three", "three")]
+    assert any(index["unique"] and index["column_names"] == ["project_id", "name_key"] for index in indexes)

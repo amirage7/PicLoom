@@ -56,6 +56,7 @@ def test_complete_batch_imports_all_images_in_order_with_parent(client, image_by
     assert [image["id"] for image in imported] == result["image_ids"]
     assert {image["parent_id"] for image in imported} == {parent["id"]}
     assert {image["prompt"] for image in imported} == {"two quiet flowers"}
+    assert [image["name"] for image in imported] == ["two quiet flowers", "two quiet flowers (2)"]
     assert all(image["position_y"] > parent["position_y"] for image in imported)
     current = client.get(f"/api/generation-tasks/{task['id']}").json()
     assert current["status"] == "completed"

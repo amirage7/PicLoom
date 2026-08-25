@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_session
 from app.schemas.images import ImageResponse, ImageUpdate
 from app.services import image_resources
+from app.services.image_names import ImageNameConflictError, ImageNameValidationError
 from app.services.image_storage import ImageStorageError, MAX_IMAGE_BYTES
 from app.services.resources import ResourceNotFoundError
 
@@ -17,6 +18,10 @@ def translate_error(error: Exception) -> HTTPException:
         return HTTPException(status_code=404, detail=str(error))
     if isinstance(error, ImageRelationshipError):
         return HTTPException(status_code=400, detail=str(error))
+    if isinstance(error, ImageNameConflictError):
+        return HTTPException(status_code=409, detail=str(error))
+    if isinstance(error, ImageNameValidationError):
+        return HTTPException(status_code=422, detail=str(error))
     if isinstance(error, ImageStorageError):
         return HTTPException(status_code=error.status_code, detail=str(error))
     return HTTPException(status_code=500, detail="图片操作失败")
@@ -64,7 +69,7 @@ def get_image_content(request: Request, image_id: str, session: Session = Depend
 def patch_image(image_id: str, payload: ImageUpdate, session: Session = Depends(get_session)):
     try:
         return image_resources.update_image(session, image_id, payload)
-    except (ResourceNotFoundError, ImageRelationshipError) as error:
+    except (ResourceNotFoundError, ImageRelationshipError, ImageNameConflictError, ImageNameValidationError) as error:
         raise translate_error(error) from error
 
 
