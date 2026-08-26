@@ -1,8 +1,8 @@
-# AI Image Canvas — ChatGPT 网页生图 Provider 设计
+# PicLoom — ChatGPT 网页生图 Provider 设计
 
 ## 1. 目标
 
-在不调用 OpenAI API、不收集 ChatGPT 账号密码、不导出登录 Cookie 的前提下，让用户从 AI Image Canvas 提交 Prompt，通过已登录的 ChatGPT 官方网页普通 Chat 生成图片，并自动保存到当前本地项目和 Canvas。
+在不调用 OpenAI API、不收集 ChatGPT 账号密码、不导出登录 Cookie 的前提下，让用户从 PicLoom 提交 Prompt，通过已登录的 ChatGPT 官方网页普通 Chat 生成图片，并自动保存到当前本地项目和 Canvas。
 
 该集成不使用 Work 或 Codex 模式。它使用用户自己的 ChatGPT 网页会话，因此仍受账号套餐、图片生成限额、内容政策和官方页面可用性影响。
 

@@ -1,4 +1,4 @@
-# AI Image Canvas 软件说明书
+# PicLoom 软件说明书
 
 文档版本：1.4
 对应软件版本：0.2.0
@@ -7,7 +7,7 @@
 
 ## 1. 软件简介
 
-AI Image Canvas 是一套本地优先的 AI 图片创作与资产管理工作台。它不在本机运行或训练图片模型，而是集中管理项目、Prompt、图片版本、父子关系、素材和创作过程。
+PicLoom 是一套本地优先的 AI 图片创作与资产管理工作台。它不在本机运行或训练图片模型，而是集中管理项目、Prompt、图片版本、父子关系、素材和创作过程。
 
 桌面版可以在应用右侧显示真实的官方 ChatGPT 普通 Chat 页面。用户本人登录自己的 ChatGPT 网页账号后，软件可提交 Prompt、等待图片回复完成，并把本次最新回复中的最终结果图片导入当前本地项目。
 
@@ -15,12 +15,12 @@ AI Image Canvas 是一套本地优先的 AI 图片创作与资产管理工作台
 
 ## 2. 产品定位
 
-AI Image Canvas 结合了 Figma 式无限画布、Midjourney Canvas 式图片创作管理、ComfyUI 式版本关系，以及本地项目库和 Prompt Library。适用于概念设计、产品视觉、建筑渲染、人物设定、电影感画面和插画探索。
+PicLoom 结合了 Figma 式无限画布、Midjourney Canvas 式图片创作管理、ComfyUI 式版本关系，以及本地项目库和 Prompt Library。适用于概念设计、产品视觉、建筑渲染、人物设定、电影感画面和插画探索。
 
 ## 3. 系统架构
 
 ```text
-AI Image Canvas 桌面应用（Electron）
+PicLoom 桌面应用（Electron）
 ├─ React + TypeScript + Vite 界面
 ├─ React Flow 无限画布
 ├─ 内嵌 ChatGPT 官方网页会话
@@ -48,7 +48,7 @@ AI Image Canvas 桌面应用（Electron）
 ### 5.1 Windows 安装包
 
 ```text
-desktop/release-new/AI Image Canvas-Setup-0.2.0.exe
+desktop/release-new/PicLoom-Setup-0.2.0.exe
 ```
 
 运行安装包并选择安装目录。安装完成后从桌面快捷方式或开始菜单启动。应用会自动启动仅监听本机回环地址的 FastAPI 后端。
@@ -56,7 +56,7 @@ desktop/release-new/AI Image Canvas-Setup-0.2.0.exe
 ### 5.2 免安装验证版
 
 ```text
-desktop/release-new/win-unpacked/AI Image Canvas.exe
+desktop/release-new/win-unpacked/PicLoom.exe
 ```
 
 ### 5.3 开发模式
@@ -123,7 +123,7 @@ ChatGPT 登录信息由 Electron 的独立持久会话保存。软件代码不�
 
 仅在普通浏览器可以登录、应用内仍持续失败时使用：
 
-1. 完全退出 AI Image Canvas。
+1. 完全退出 PicLoom。
 2. 先备份 `%APPDATA%\ai-image-canvas-desktop\data`。
 3. 将 `%APPDATA%\ai-image-canvas-desktop\Partitions\ai-image-canvas-chatgpt` 重命名为备份名称。
 4. 重新启动应用并再次登录。

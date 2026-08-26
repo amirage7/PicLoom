@@ -1,4 +1,4 @@
-# AI Image Canvas Phase 2 Design
+# PicLoom Phase 2 Design
 
 ## 目标
 

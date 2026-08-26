@@ -1,21 +1,21 @@
-# PicLoom
+# PicLoom（仓库名：PicLoom）
 
 > 本地优先的 AI 图片创作管理工作台。
 > 把分散的 AI 生图、整理、迭代过程，集中到一个可追溯的本地画布中。
 
-AI Image Canvas 面向需要管理大量 Prompt、参考素材和图片版本的创作者与设计师。它不运行生成模型，而是把**项目、Prompt、图片素材、版本关系和创作上下文**组织在一个连续空间中，让你无需在文件夹、聊天记录和笔记之间来回寻找，就能恢复并继续一次创作。
+PicLoom 面向需要管理大量 Prompt、参考素材和图片版本的创作者与设计师。它不运行生成模型，而是把**项目、Prompt、图片素材、版本关系和创作上下文**组织在一个连续空间中，让你无需在文件夹、聊天记录和笔记之间来回寻找，就能恢复并继续一次创作。
 
-完整的使用说明、登录、生图、数据备份与故障排查见 [AI Image Canvas 软件说明书](docs/AI-Image-Canvas-软件说明书.md)。
+完整的使用说明、登录、生图、数据备份与故障排查见 [PicLoom 软件说明书](docs/PicLoom-软件说明书.md)。
 
 ---
 
 ## 快速开始（Windows 用户）
 
 1. **下载安装包**：
-   - 推荐从 [GitHub Releases](../../releases) 下载最新 `AI Image Canvas-Setup-0.2.0.exe`（约 119 MB）。
-   - 如果你已经克隆了本仓库，也可以在 `desktop/release-new/AI Image Canvas-Setup-0.2.0.exe` 找到当前版本安装包。
+   - 推荐从 [GitHub Releases](../../releases) 下载最新 `PicLoom-Setup-0.2.0.exe`（约 119 MB）。
+   - 如果你已经克隆了本仓库，也可以在 `desktop/release-new/PicLoom-Setup-0.2.0.exe` 找到当前版本安装包。
 2. **双击安装**，按向导完成。
-3. **启动应用**：安装结束后会自动运行；之后可在开始菜单找到 **AI Image Canvas**。
+3. **启动应用**：安装结束后会自动运行；之后可在开始菜单找到 **PicLoom**。
 4. **登录 ChatGPT**：打开右侧「ChatGPT」标签 → 点击「登录 / 查看 ChatGPT」→ 在官方页面登录自己的账号。
 5. **开始创作**：选择或创建一个项目，在 Prompt 区输入需求，点击「使用 ChatGPT 生成」；需要参考图时输入 `@` 选择项目内图片。
 
@@ -42,7 +42,7 @@ AI Image Canvas 面向需要管理大量 Prompt、参考素材和图片版本的
 
 | 项目 | 说明 |
 |------|------|
-| 安装包文件 | `AI Image Canvas-Setup-0.2.0.exe` |
+| 安装包文件 | `PicLoom-Setup-0.2.0.exe` |
 | 体积 | 约 119 MB |
 | 运行环境 | Windows 10/11 64 位 |
 | 包含内容 | Electron 桌面端 + 内嵌 FastAPI 本地后端 |
@@ -50,7 +50,7 @@ AI Image Canvas 面向需要管理大量 Prompt、参考素材和图片版本的
 
 ### 安装流程
 
-1. 下载 `AI Image Canvas-Setup-0.2.0.exe`。
+1. 下载 `PicLoom-Setup-0.2.0.exe`。
 2. 双击运行安装向导，选择安装位置。
 3. 安装完成后应用自动启动；后续可从开始菜单打开。
 4. 首次启动会创建本地数据库、图片目录和示例项目。
@@ -187,4 +187,4 @@ npm run desktop:typecheck
 npm run build:desktop
 ```
 
-首次构建会安装 PyInstaller，并可能由 electron-builder 下载 Windows 打包工具。输出到 `desktop/release-new/AI Image Canvas-Setup-0.2.0.exe`。
+首次构建会安装 PyInstaller，并可能由 electron-builder 下载 Windows 打包工具。输出到 `desktop/release-new/PicLoom-Setup-0.2.0.exe`。

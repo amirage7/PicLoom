@@ -1,4 +1,4 @@
-# AI Image Canvas Phase 1 Implementation Plan
+# PicLoom Phase 1 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -64,7 +64,7 @@ client = TestClient(app)
 def test_health_check() -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "app": "AI Image Canvas"}
+    assert response.json() == {"status": "ok", "app": "PicLoom"}
 ```
 
 - [ ] **Step 2: Run the test and confirm failure**
@@ -74,7 +74,7 @@ Expected: FAIL because `app.main` does not exist.
 
 - [ ] **Step 3: Implement configuration, route, and app factory**
 
-Define immutable settings with app name `AI Image Canvas` and local CORS origins. Define `GET /health` on a child router, include it under `/api`, and create the FastAPI application through `create_app()` so tests and future services share the same construction path.
+Define immutable settings with app name `PicLoom` and local CORS origins. Define `GET /health` on a child router, include it under `/api`, and create the FastAPI application through `create_app()` so tests and future services share the same construction path.
 
 - [ ] **Step 4: Run backend tests**
 
@@ -172,7 +172,7 @@ import App from './App'
 
 vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
 
-describe('AI Image Canvas shell', () => {
+describe('PicLoom shell', () => {
   it('renders all workspace landmarks and switches projects', async () => {
     render(<App />)
     expect(screen.getByRole('navigation', { name: 'Workspace navigation' })).toBeInTheDocument()
@@ -224,7 +224,7 @@ Expected: all tests pass.
 
 - [ ] **Step 4: Smoke-test both services**
 
-Start FastAPI on port 8000 and Vite on port 3000. Verify `GET /api/health` returns `{ "status": "ok", "app": "AI Image Canvas" }` and the browser root renders the three-column workspace.
+Start FastAPI on port 8000 and Vite on port 3000. Verify `GET /api/health` returns `{ "status": "ok", "app": "PicLoom" }` and the browser root renders the three-column workspace.
 
 - [ ] **Step 5: Record Phase 1 handoff**
 

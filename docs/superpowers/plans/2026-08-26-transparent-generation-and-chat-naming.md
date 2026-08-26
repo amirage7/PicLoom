@@ -229,7 +229,7 @@ Run the Task 4 command and expect all selected tests to pass.
 ### Task 5: Documentation, full verification, and installer refresh
 
 **Files:**
-- Modify: `docs/AI-Image-Canvas-软件说明书.md`
+- Modify: `docs/PicLoom-软件说明书.md`
 - Modify: `README.md`
 
 - [ ] **Step 1: Update user documentation**
@@ -256,4 +256,4 @@ Expected: every command exits 0 and `git diff --check` reports no whitespace err
 
 - [ ] **Step 3: Rebuild and smoke-test the installer**
 
-Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-desktop.ps1`, verify the installer exists in `desktop/release-new`, start `win-unpacked/AI Image Canvas.exe`, wait for `http://127.0.0.1:8001/api/health` to return `status: ok`, then stop only processes whose executable path is inside that exact `win-unpacked` directory.
+Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-desktop.ps1`, verify the installer exists in `desktop/release-new`, start `win-unpacked/PicLoom.exe`, wait for `http://127.0.0.1:8001/api/health` to return `status: ok`, then stop only processes whose executable path is inside that exact `win-unpacked` directory.

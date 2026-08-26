@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let AI Image Canvas submit one image prompt at a time through a user-authenticated, visible ChatGPT Chat tab and persist the returned image as a local Canvas node without storing ChatGPT credentials or cookies.
+**Goal:** Let PicLoom submit one image prompt at a time through a user-authenticated, visible ChatGPT Chat tab and persist the returned image as a local Canvas node without storing ChatGPT credentials or cookies.
 
 **Architecture:** React calls a replaceable `ImageProvider` that creates and polls FastAPI generation tasks. A paired Manifest V3 Chrome extension claims one queued task, drives semantic controls on `chatgpt.com`, uploads the final image bytes, and reports typed progress/errors; FastAPI owns authentication, state transitions, SQLite records, and atomic image persistence.
 
@@ -400,7 +400,7 @@ Expected: FAIL because the extension modules are missing.
 ```json
 {
   "manifest_version": 3,
-  "name": "AI Image Canvas Bridge",
+  "name": "PicLoom Bridge",
   "version": "0.1.0",
   "permissions": ["storage", "tabs", "activeTab"],
   "host_permissions": ["http://127.0.0.1:8000/*", "https://chatgpt.com/*"],
@@ -716,7 +716,7 @@ npm install
 npm run build
 ```
 
-Then document `chrome://extensions` → developer mode → load `extension/dist` → generate pairing code in AI Image Canvas → enter it in the extension → manually sign in at `https://chatgpt.com/`. State clearly that the app never requests passwords/cookies, does not bypass challenges or limits, and may need adapter updates when ChatGPT changes.
+Then document `chrome://extensions` → developer mode → load `extension/dist` → generate pairing code in PicLoom → enter it in the extension → manually sign in at `https://chatgpt.com/`. State clearly that the app never requests passwords/cookies, does not bypass challenges or limits, and may need adapter updates when ChatGPT changes.
 
 - [ ] **Step 2: Run backend verification**
 

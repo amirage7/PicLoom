@@ -1,4 +1,4 @@
-# AI Image Canvas 桌面版验证记录
+# PicLoom 桌面版验证记录
 
 验证日期：2026-08-25
 ChatGPT 适配器：`2026-08-25.1`
@@ -13,7 +13,7 @@ Electron：`37.10.3`
 - 扩展兼容模式：10 项测试通过，生产构建通过。
 - PyInstaller 后端 EXE：健康检查、项目读取、临时 SQLite 创建通过。
 - Electron `win-unpacked`：应用启动成功，内置后端仅监听 `127.0.0.1:8001`。
-- NSIS：`AI Image Canvas-Setup-0.2.0.exe` 已生成。
+- NSIS：`PicLoom-Setup-0.2.0.exe` 已生成。
 - 生命周期：正常关闭窗口后 `127.0.0.1:8001` 立即释放，无 PyInstaller 后端残留。
 
 ## 需要用户本人完成的账号验证

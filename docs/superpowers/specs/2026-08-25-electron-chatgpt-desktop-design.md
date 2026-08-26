@@ -1,8 +1,8 @@
-# AI Image Canvas Electron ChatGPT Desktop Design
+# PicLoom Electron ChatGPT Desktop Design
 
 ## 目标
 
-将 AI Image Canvas 从纯浏览器 WebUI 扩展为 Windows 桌面应用。在桌面应用内部加载真实 `chatgpt.com`，用户手动登录自己的 ChatGPT 账号，并使用普通 Chat 的图片生成功能。系统不调用 OpenAI API，也不通过 Codex app-server 执行生成任务。
+将 PicLoom 从纯浏览器 WebUI 扩展为 Windows 桌面应用。在桌面应用内部加载真实 `chatgpt.com`，用户手动登录自己的 ChatGPT 账号，并使用普通 Chat 的图片生成功能。系统不调用 OpenAI API，也不通过 Codex app-server 执行生成任务。
 
 保留现有 React、FastAPI、SQLite、React Flow 和本地图片存储。Electron 只新增桌面运行层、内嵌浏览器、页面自动化和安全 IPC。
 

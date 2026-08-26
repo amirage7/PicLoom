@@ -1,4 +1,4 @@
-# AI Image Canvas Phase 3 持久化设计
+# PicLoom Phase 3 持久化设计
 
 ## 目标
 

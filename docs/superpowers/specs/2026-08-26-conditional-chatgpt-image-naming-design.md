@@ -1,8 +1,8 @@
-# AI Image Canvas 条件式 ChatGPT 图片命名设计
+# PicLoom 条件式 ChatGPT 图片命名设计
 
 ## 目标
 
-当 ChatGPT 生图回复没有返回图片名称时，AI Image Canvas 自动在当前 Chat 会话发送一次简短命名请求，并将返回名称用于新图片。不得再次生图，不调用 OpenAI API，不读取或导出登录凭据。
+当 ChatGPT 生图回复没有返回图片名称时，PicLoom 自动在当前 Chat 会话发送一次简短命名请求，并将返回名称用于新图片。不得再次生图，不调用 OpenAI API，不读取或导出登录凭据。
 
 ## 当前问题
 

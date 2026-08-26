@@ -1,8 +1,8 @@
-# AI Image Canvas Electron ChatGPT Desktop Implementation Plan
+# PicLoom Electron ChatGPT Desktop Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship a Windows-first Electron desktop edition of AI Image Canvas that embeds the real ChatGPT website in a persistent, user-controlled browser profile, automates ordinary Chat image generation through a versioned page adapter, and imports every image returned by one response into the current local Canvas project without using the OpenAI API or Codex.
+**Goal:** Ship a Windows-first Electron desktop edition of PicLoom that embeds the real ChatGPT website in a persistent, user-controlled browser profile, automates ordinary Chat image generation through a versioned page adapter, and imports every image returned by one response into the current local Canvas project without using the OpenAI API or Codex.
 
 **Architecture:** Electron owns the application lifecycle, a hardened renderer window, and a persistent `WebContentsView` for `chatgpt.com`. The React renderer talks only to a narrow preload IPC contract. A desktop generation orchestrator drives a versioned ChatGPT DOM adapter, downloads the images from the signed-in web session, and sends a multipart batch to the existing FastAPI service. FastAPI remains the source of truth for projects, tasks, image files, relationships, and Canvas positions. The existing browser-extension provider remains available as a fallback, but desktop ChatGPT becomes the primary provider when the preload bridge is present.
 
@@ -646,7 +646,7 @@ Also cover login pause/resume, refusal, rate limit, adapter page change, cancel 
 
 ```yaml
 appId: com.aiimagecanvas.desktop
-productName: AI Image Canvas
+productName: PicLoom
 files:
   - dist/**
   - package.json
@@ -679,7 +679,7 @@ nsis:
 
 - [ ] Install into a temporary Windows test directory, launch, log into ChatGPT manually, generate a harmless two-image prompt, verify both images import, quit/relaunch, and verify the ChatGPT session and Canvas project persist. Record the date, ChatGPT adapter version, Electron version, and pass/fail in `docs/manual-verification.md`; do not record account identifiers or screenshots containing private chat history.
 
-- [ ] Commit: `git add backend/ai_image_canvas_backend.spec scripts desktop package.json README.md docs/manual-verification.md && git commit -m "build: package AI Image Canvas desktop for Windows"`
+- [ ] Commit: `git add backend/ai_image_canvas_backend.spec scripts desktop package.json README.md docs/manual-verification.md && git commit -m "build: package PicLoom desktop for Windows"`
 
 ## Task 15: Final regression, security audit, and handoff
 
@@ -730,7 +730,7 @@ npm.cmd run build:desktop
 
 ## Completion criteria
 
-- The user logs into the real ChatGPT website inside the AI Image Canvas desktop application; credentials remain owned by the embedded browser session.
+- The user logs into the real ChatGPT website inside the PicLoom desktop application; credentials remain owned by the embedded browser session.
 - Starting a prompt uses ordinary ChatGPT Chat, not OpenAI API, Work, or Codex.
 - Every image in the newly created assistant response is downloaded through the signed-in session and atomically imported into the selected local project.
 - Parent relationship, prompt, project, batch, file paths, and Canvas positions survive restart.

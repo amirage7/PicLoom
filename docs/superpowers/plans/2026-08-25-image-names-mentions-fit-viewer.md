@@ -379,7 +379,7 @@ git commit -m "feat: fit original images on viewer open"
 ### Task 6: Update documentation, run the full suite, package, and launch
 
 **Files:**
-- Modify: `docs/AI-Image-Canvas-软件说明书.md`
+- Modify: `docs/PicLoom-软件说明书.md`
 - Modify: `docs/manual-verification.md`
 - Modify: `docs/superpowers/plans/2026-08-25-image-names-mentions-fit-viewer.md`
 
@@ -403,17 +403,17 @@ Expected: zero failures and zero TypeScript/build errors.
 
 - [x] **Step 3: Build the Windows installer**
 
-First identify and stop only processes whose executable path is the current project's `desktop\release\win-unpacked\AI Image Canvas.exe`, then run:
+First identify and stop only processes whose executable path is the current project's `desktop\release\win-unpacked\PicLoom.exe`, then run:
 
 ```powershell
 npm.cmd run build:desktop
 ```
 
-Expected: `desktop/release/AI Image Canvas-Setup-0.2.0.exe` and a refreshed `win-unpacked` app.
+Expected: `desktop/release/PicLoom-Setup-0.2.0.exe` and a refreshed `win-unpacked` app.
 
 - [x] **Step 4: Launch and verify health**
 
-Launch the exact unpacked executable, wait for `http://127.0.0.1:8001/api/health`, and require HTTP 200 with `{ "status": "ok", "app": "AI Image Canvas" }`. Confirm the process path belongs to this workspace.
+Launch the exact unpacked executable, wait for `http://127.0.0.1:8001/api/health`, and require HTTP 200 with `{ "status": "ok", "app": "PicLoom" }`. Confirm the process path belongs to this workspace.
 
 - [x] **Step 5: Review requirements and working tree**
 
@@ -422,6 +422,6 @@ Compare implementation to every design-spec section, run `git diff --check`, ins
 - [x] **Step 6: Commit documentation and plan completion**
 
 ```powershell
-git add docs/AI-Image-Canvas-软件说明书.md docs/manual-verification.md docs/superpowers/plans/2026-08-25-image-names-mentions-fit-viewer.md
+git add docs/PicLoom-软件说明书.md docs/manual-verification.md docs/superpowers/plans/2026-08-25-image-names-mentions-fit-viewer.md
 git commit -m "docs: explain named image reference workflow"
 ```

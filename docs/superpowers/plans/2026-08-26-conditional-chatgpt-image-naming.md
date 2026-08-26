@@ -179,7 +179,7 @@ Expected: zero failed tests.
 
 Run: `npm.cmd run package` from `desktop/` after ensuring the current frontend and backend production artifacts exist.
 
-Expected installer: `desktop/release-new/AI Image Canvas-Setup-0.2.0.exe`.
+Expected installer: `desktop/release-new/PicLoom-Setup-0.2.0.exe`.
 
 - [ ] **Step 4: Verify packaged adapter and compute checksum**
 

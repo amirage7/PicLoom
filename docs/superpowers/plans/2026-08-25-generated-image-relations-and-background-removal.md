@@ -84,7 +84,7 @@
 ### Task 5: Full verification and packaging
 
 **Files:**
-- Modify: `docs/AI-Image-Canvas-软件说明书.md`
+- Modify: `docs/PicLoom-软件说明书.md`
 
 - [ ] Document line meaning, multi-source relations, relation deletion, final-output-only import, and background removal.
 - [ ] Run all backend, desktop, frontend, and extension tests and confirm zero failures.

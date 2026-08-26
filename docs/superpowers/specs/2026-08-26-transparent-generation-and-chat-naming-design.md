@@ -1,7 +1,7 @@
 # 透明背景生图与 ChatGPT 自动命名设计
 
 日期：2026-08-26  
-适用版本：AI Image Canvas 0.2.x
+适用版本：PicLoom 0.2.x
 
 ## 目标
 

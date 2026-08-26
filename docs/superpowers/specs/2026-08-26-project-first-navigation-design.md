@@ -1,4 +1,4 @@
-# AI Image Canvas 项目优先导航设计
+# PicLoom 项目优先导航设计
 
 ## 目标
 

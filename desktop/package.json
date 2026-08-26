@@ -1,7 +1,7 @@
 {
   "name": "ai-image-canvas-desktop",
   "description": "Local-first AI image creation canvas with an embedded user-authenticated ChatGPT page.",
-  "author": "AI Image Canvas",
+  "author": "PicLoom",
   "private": true,
   "version": "0.2.0",
   "main": "dist/src/main.js",

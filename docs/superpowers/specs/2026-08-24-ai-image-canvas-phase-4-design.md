@@ -1,4 +1,4 @@
-# AI Image Canvas Phase 4 UI Design
+# PicLoom Phase 4 UI Design
 
 ## Objective
 
