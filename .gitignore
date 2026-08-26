@@ -42,6 +42,10 @@ data/images/**
 # Old build artifacts
 **/dist.old/
 
+# Build backups / packaged output
+**/dist-bak/
+desktop/release-build/
+
 # Editors and OS
 .idea/
 .vscode/
