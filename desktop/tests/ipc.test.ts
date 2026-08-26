@@ -28,10 +28,10 @@ describe('desktop IPC validation', () => {
   it('validates generation identifiers and Unicode prompt length', () => {
     expect(validateTaskId(' task-1 ')).toBe('task-1')
     expect(validateGenerationRequest({
-      taskId: 'task-1', projectId: 'project-1', prompt: '🌸'.repeat(20_000), parentImageId: null, referenceImages: [],
+      taskId: 'task-1', projectId: 'project-1', prompt: '🌸'.repeat(20_000), parentImageId: null, referenceImages: [], transparentBackground: false,
     }).prompt).toHaveLength(40_000)
     expect(() => validateGenerationRequest({
-      taskId: 'task-1', projectId: 'project-1', prompt: '🌸'.repeat(20_001), parentImageId: null, referenceImages: [],
+      taskId: 'task-1', projectId: 'project-1', prompt: '🌸'.repeat(20_001), parentImageId: null, referenceImages: [], transparentBackground: false,
     })).toThrow('INVALID_GENERATION_REQUEST')
     expect(() => validateTaskId('')).toThrow('INVALID_TASK_ID')
   })
@@ -46,6 +46,7 @@ describe('desktop IPC validation', () => {
         { imageId: 'build', name: ' 假面骑士build ' },
         { imageId: 'sheep', name: '喜羊羊' },
       ],
+      transparentBackground: true,
     }
     expect(validateGenerationRequest(valid)).toEqual({
       ...valid,
@@ -66,6 +67,11 @@ describe('desktop IPC validation', () => {
       referenceImages: [{ imageId: 'build', name: '甲' }, { imageId: 'build', name: '乙' }],
     })).toThrow('INVALID_GENERATION_REQUEST')
     expect(() => validateGenerationRequest({ ...valid, parentImageId: 'sheep' }))
+      .toThrow('INVALID_GENERATION_REQUEST')
+    expect(() => validateGenerationRequest({ ...valid, transparentBackground: 'yes' }))
+      .toThrow('INVALID_GENERATION_REQUEST')
+    const { transparentBackground: _omitted, ...withoutTransparentBackground } = valid
+    expect(() => validateGenerationRequest(withoutTransparentBackground))
       .toThrow('INVALID_GENERATION_REQUEST')
   })
 })
@@ -95,10 +101,10 @@ describe('desktop IPC registration', () => {
     await expect(handlers.get(IPC_CHANNELS.reloadChatGpt)?.({})).resolves.toBeUndefined()
     expect(view.reload).toHaveBeenCalledOnce()
     await expect(handlers.get(IPC_CHANNELS.startGeneration)?.({}, {
-      taskId: 'task-1', projectId: 'project-1', prompt: '一朵花', parentImageId: null, referenceImages: [],
+      taskId: 'task-1', projectId: 'project-1', prompt: '一朵花', parentImageId: null, referenceImages: [], transparentBackground: false,
     })).resolves.toBeUndefined()
     expect(orchestrator.start).toHaveBeenCalledWith({
-      taskId: 'task-1', projectId: 'project-1', prompt: '一朵花', parentImageId: null, referenceImages: [],
+      taskId: 'task-1', projectId: 'project-1', prompt: '一朵花', parentImageId: null, referenceImages: [], transparentBackground: false,
     })
     await expect(handlers.get(IPC_CHANNELS.cancelGeneration)?.({}, '')).rejects.toThrow('INVALID_TASK_ID')
   })

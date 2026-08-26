@@ -1,11 +1,13 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DesktopBridgeApi } from '../desktop/types'
 import { useAppStore } from '../../app/store'
 import { useCanvasStore } from '../canvas/store/canvasStore'
 import { ChatGptGenerationPanel } from './ChatGptGenerationPanel'
+import { useGenerationStore } from './generationStore'
 import * as api from './generationApi'
 
 vi.mock('./generationApi')
@@ -26,8 +28,13 @@ function installBridge(): DesktopBridgeApi {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks()
   useAppStore.setState({ activeProjectId: 'future-city' })
   useCanvasStore.getState().reset()
+  useGenerationStore.setState({
+    prompt: '', transparentBackground: false, quickAction: null, isPanelOpen: false,
+    desktopBusy: false, desktopTaskId: null, desktopRecoverableTaskId: null, desktopEvent: null,
+  })
   vi.mocked(api.createGenerationTask).mockResolvedValue({
     id: 'task-1', project_id: 'project-1', provider: 'chatgpt-web', prompt: '一朵花',
     parent_image_id: null, status: 'queued', progress_message: 'queued', chat_url: null,
@@ -59,11 +66,16 @@ describe('ChatGptGenerationPanel', () => {
     const bridge = installBridge()
     render(<ChatGptGenerationPanel projectId="project-1" />)
 
+    const transparentOption = screen.getByRole('button', { name: '透明背景' })
+    expect(transparentOption).toHaveAttribute('aria-pressed', 'false')
+    await user.click(transparentOption)
+    expect(transparentOption).toHaveAttribute('aria-pressed', 'true')
     await user.type(screen.getByRole('textbox', { name: 'Prompt' }), '一朵花')
     await user.click(screen.getByRole('button', { name: '使用 ChatGPT 生成' }))
 
     await waitFor(() => expect(bridge.startGeneration).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1', prompt: '一朵花', parentImageId: null,
+      transparentBackground: true,
     })))
   })
 
@@ -113,5 +125,133 @@ describe('ChatGptGenerationPanel', () => {
         { imageId: 'street-level', name: '喜羊羊' },
       ],
     }))
+  })
+
+  it('shares the editable prompt with the generation store', async () => {
+    const user = userEvent.setup()
+    installBridge()
+    useGenerationStore.setState({ prompt: '共享草稿' })
+    render(<ChatGptGenerationPanel projectId="future-city" />)
+
+    const prompt = screen.getByRole('textbox', { name: 'Prompt' })
+    expect(prompt).toHaveValue('共享草稿')
+    await user.type(prompt, '继续')
+    expect(useGenerationStore.getState().prompt).toBe('共享草稿继续')
+  })
+
+  it('automatically starts a queued one-click action exactly once in StrictMode', async () => {
+    const bridge = installBridge()
+    const prompt = '@喜羊羊 移除此图像的背景。保持所有前景主体不变且完整无损，边缘干净平滑。将背景设为透明。'
+    useGenerationStore.getState().enqueueQuickAction({
+      projectId: 'future-city',
+      prompt,
+      referenceImages: [{ imageId: 'street-level', name: '喜羊羊' }],
+      transparentBackground: false,
+    })
+
+    const { rerender } = render(
+      <StrictMode><ChatGptGenerationPanel projectId="future-city" /></StrictMode>,
+    )
+
+    await waitFor(() => expect(bridge.startGeneration).toHaveBeenCalledOnce())
+    expect(api.createGenerationTask).toHaveBeenCalledWith('future-city', prompt, 'street-level')
+    expect(bridge.startGeneration).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'future-city',
+      prompt,
+      parentImageId: 'street-level',
+      referenceImages: [{ imageId: 'street-level', name: '喜羊羊' }],
+      transparentBackground: false,
+    }))
+
+    rerender(<StrictMode><ChatGptGenerationPanel projectId="future-city" /></StrictMode>)
+    await waitFor(() => expect(bridge.startGeneration).toHaveBeenCalledOnce())
+  })
+
+  it('does not create an orphan task when a quick action arrives after panel remount during generation', async () => {
+    const user = userEvent.setup()
+    const bridge = installBridge()
+    const first = render(<ChatGptGenerationPanel projectId="future-city" />)
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), '第一张图')
+    await user.click(screen.getByRole('button', { name: '使用 ChatGPT 生成' }))
+    await waitFor(() => expect(bridge.startGeneration).toHaveBeenCalledOnce())
+    first.unmount()
+
+    const quickPrompt = '@喜羊羊 移除此图像的背景。保持所有前景主体不变且完整无损，边缘干净平滑。将背景设为透明。'
+    useGenerationStore.getState().enqueueQuickAction({
+      projectId: 'future-city', prompt: quickPrompt,
+      referenceImages: [{ imageId: 'street-level', name: '喜羊羊' }],
+      transparentBackground: false,
+    })
+    render(<ChatGptGenerationPanel projectId="future-city" />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('当前有图片正在生成，请完成或取消后再试。')
+    expect(api.createGenerationTask).toHaveBeenCalledOnce()
+    expect(bridge.startGeneration).toHaveBeenCalledOnce()
+    expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue(quickPrompt)
+  })
+
+  it('cancels the created backend task and releases the guard when desktop start fails', async () => {
+    const user = userEvent.setup()
+    const bridge = installBridge()
+    vi.mocked(bridge.startGeneration).mockRejectedValueOnce(new Error('窗口不可用'))
+    vi.mocked(api.cancelGenerationTask).mockResolvedValue({
+      id: 'task-1', project_id: 'future-city', provider: 'chatgpt-web', prompt: '一朵花',
+      parent_image_id: null, status: 'cancelled', progress_message: 'cancelled', chat_url: null,
+      image_id: null, image_ids_json: '[]', provider_mode: 'desktop', error_code: null,
+    })
+    render(<ChatGptGenerationPanel projectId="future-city" />)
+
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), '一朵花')
+    await user.click(screen.getByRole('button', { name: '使用 ChatGPT 生成' }))
+
+    await waitFor(() => expect(api.cancelGenerationTask).toHaveBeenCalledWith('task-1'))
+    expect(useGenerationStore.getState().desktopBusy).toBe(false)
+    expect(screen.getByRole('alert')).toHaveTextContent('窗口不可用')
+  })
+
+  it('restores a recoverable task after remount and retries collection with its original id', async () => {
+    const user = userEvent.setup()
+    const bridge = installBridge()
+    const first = render(<ChatGptGenerationPanel projectId="future-city" />)
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), '一朵花')
+    await user.click(screen.getByRole('button', { name: '使用 ChatGPT 生成' }))
+    await waitFor(() => expect(bridge.startGeneration).toHaveBeenCalledOnce())
+    const listener = vi.mocked(bridge.onGenerationEvent).mock.calls[0][0]
+
+    act(() => listener({
+      taskId: 'task-1', state: 'page_changed', message: '页面变化，可重试收集',
+      imageIds: [], recoverable: true,
+    }))
+    expect(useGenerationStore.getState().desktopBusy).toBe(false)
+    first.unmount()
+    render(<ChatGptGenerationPanel projectId="future-city" />)
+
+    expect(screen.getByRole('status')).toHaveTextContent('页面变化，可重试收集')
+    const retry = screen.getByRole('button', { name: '重试收集图片' })
+    expect(retry).toBeEnabled()
+    await user.click(retry)
+    expect(bridge.retryCollection).toHaveBeenCalledWith('task-1')
+  })
+
+  it('disables retry immediately when a new task replaces an old recoverable task', async () => {
+    const user = userEvent.setup()
+    const bridge = installBridge()
+    render(<ChatGptGenerationPanel projectId="future-city" />)
+    await waitFor(() => expect(bridge.onGenerationEvent).toHaveBeenCalledOnce())
+    const listener = vi.mocked(bridge.onGenerationEvent).mock.calls[0][0]
+    act(() => listener({
+      taskId: 'task-old', state: 'page_changed', message: '旧任务可重试',
+      imageIds: [], recoverable: true,
+    }))
+    expect(screen.getByRole('button', { name: '重试收集图片' })).toBeEnabled()
+
+    const prompt = screen.getByRole('textbox', { name: 'Prompt' })
+    await user.type(prompt, '开始一个新任务')
+    await user.click(screen.getByRole('button', { name: '使用 ChatGPT 生成' }))
+    await waitFor(() => expect(bridge.startGeneration).toHaveBeenCalledOnce())
+
+    expect(screen.getByRole('button', { name: '重试收集图片' })).toBeDisabled()
+    expect(useGenerationStore.getState().desktopRecoverableTaskId).toBeNull()
+    expect(useGenerationStore.getState().desktopEvent).toBeNull()
   })
 })

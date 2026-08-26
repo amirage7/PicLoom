@@ -14,14 +14,20 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import Image
 from app.models.generation import GenerationTask
-from app.services.image_names import available_name_from_keys, preferred_image_name
+from app.services.image_names import (
+    available_name_from_keys,
+    preferred_image_name,
+    suggested_image_name,
+)
 from app.services.image_storage import (
     FORMAT_EXTENSIONS,
     ImageStorageError,
     MAX_IMAGE_BYTES,
     resolve_stored_path,
+    storage_scope,
 )
 from app.services.resources import ResourceNotFoundError
+from app.services import image_relations
 
 
 MAX_BATCH_BYTES = 80 * 1024 * 1024
@@ -76,7 +82,7 @@ def _validate(files: list[BatchFile]) -> list[ValidatedFile]:
     return validated
 
 
-def _existing_by_digest(session: Session, data_dir: Path, project_id: str) -> dict[str, Image]:
+def _existing_by_digest(session: Session, data_dir: Path, project_id: str | None) -> dict[str, Image]:
     result: dict[str, Image] = {}
     images = session.scalars(
         select(Image).where(Image.project_id == project_id).order_by(Image.created_time)
@@ -108,6 +114,8 @@ def complete_task(
     batch_id: str,
     source_url: str,
     files: list[BatchFile],
+    suggested_name: str | None = None,
+    suggested_names: list[str | None] | None = None,
 ) -> BatchResult:
     task = session.get(GenerationTask, task_id)
     if task is None:
@@ -135,7 +143,7 @@ def complete_task(
 
     parent = session.get(Image, task.parent_image_id) if task.parent_image_id else None
     positions = _positions(parent, len(unique_new))
-    project_dir = data_dir / "images" / task.project_id
+    project_dir = data_dir / "images" / storage_scope(task.project_id)
     project_dir.mkdir(parents=True, exist_ok=True)
     staging = project_dir / f".batch-{uuid4()}"
     staging.mkdir()
@@ -153,8 +161,16 @@ def complete_task(
             staged_path.write_bytes(item.content)
             final_path = project_dir / staged_path.name
             x, y = positions[index]
+            per_file_hint = (
+                suggested_names[index]
+                if suggested_names is not None and index < len(suggested_names)
+                else None
+            )
             name, name_key = available_name_from_keys(
-                preferred_image_name(task.prompt, item.file_name), used_name_keys
+                suggested_image_name(per_file_hint)
+                or suggested_image_name(suggested_name)
+                or preferred_image_name(task.prompt, item.file_name),
+                used_name_keys,
             )
             used_name_keys.add(name_key)
             image = Image(
@@ -169,6 +185,9 @@ def complete_task(
                 parent_id=task.parent_image_id,
                 position_x=x,
                 position_y=y,
+                is_on_canvas=task.project_id is not None,
+                is_favorite=False,
+                source_type="generated",
                 created_time=now,
             )
             session.add(image)
@@ -179,6 +198,12 @@ def complete_task(
             for item in validated
         ]
         session.flush()
+        for output_id in dict.fromkeys(ordered_ids):
+            for reference_id in task.reference_image_ids:
+                if reference_id != output_id:
+                    image_relations.create_relation(
+                        session, reference_id, output_id, commit=False
+                    )
         for staged_path in staging.iterdir():
             final_path = project_dir / staged_path.name
             os.replace(staged_path, final_path)

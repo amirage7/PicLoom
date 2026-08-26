@@ -27,6 +27,7 @@ function createImage(
     name,
     prompt,
     tags: ['未来城市', '建筑概念'],
+    sourceIds: parentId ? [parentId] : [],
     parentId,
     createdTime,
   }
@@ -82,8 +83,8 @@ export function createInitialCanvases(): Record<string, ProjectCanvasState> {
   ]
 
   const edges: Edge[] = [
-    { id: 'edge-city-overview-street-level', source: 'city-overview', target: 'street-level', type: 'smoothstep' },
-    { id: 'edge-street-level-transit-hub', source: 'street-level', target: 'transit-hub', type: 'smoothstep' },
+    { id: 'edge-city-overview-street-level', source: 'city-overview', target: 'street-level', type: 'smoothstep', interactionWidth: 24 },
+    { id: 'edge-street-level-transit-hub', source: 'street-level', target: 'transit-hub', type: 'smoothstep', interactionWidth: 24 },
   ]
 
   return {

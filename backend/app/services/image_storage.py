@@ -1,6 +1,6 @@
 from io import BytesIO
 from pathlib import Path
-from shutil import copy2, rmtree
+from shutil import copy2, move, rmtree
 from uuid import uuid4
 
 from PIL import Image as PillowImage, UnidentifiedImageError
@@ -16,16 +16,20 @@ class ImageStorageError(Exception):
         self.status_code = status_code
 
 
-def _project_directory(images_root: Path, project_id: str) -> Path:
+def storage_scope(project_id: str | None) -> str:
+    return project_id or "_unarchived"
+
+
+def _project_directory(images_root: Path, project_id: str | None) -> Path:
     root = images_root.resolve()
-    directory = (root / project_id).resolve()
+    directory = (root / storage_scope(project_id)).resolve()
     if root not in directory.parents:
         raise ImageStorageError("非法项目路径")
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
 
-def store_image(images_root: Path, project_id: str, content: bytes) -> Path:
+def store_image(images_root: Path, project_id: str | None, content: bytes) -> Path:
     if len(content) > MAX_IMAGE_BYTES:
         raise ImageStorageError("图片不能超过 20 MB", status_code=413)
     try:
@@ -50,7 +54,7 @@ def store_image(images_root: Path, project_id: str, content: bytes) -> Path:
     return final
 
 
-def duplicate_image(images_root: Path, project_id: str, source: Path) -> Path:
+def duplicate_image(images_root: Path, project_id: str | None, source: Path) -> Path:
     if not source.is_file():
         raise ImageStorageError("原始图片文件不存在", status_code=500)
     directory = _project_directory(images_root, project_id)
@@ -69,6 +73,14 @@ def resolve_stored_path(data_dir: Path, relative_path: str) -> Path:
 
 def remove_image(data_dir: Path, relative_path: str) -> None:
     resolve_stored_path(data_dir, relative_path).unlink(missing_ok=True)
+
+
+def move_image(images_root: Path, project_id: str | None, source: Path) -> Path:
+    if not source.is_file():
+        raise ImageStorageError("原始图片文件不存在", status_code=500)
+    destination = _project_directory(images_root, project_id) / source.name
+    move(str(source), str(destination))
+    return destination
 
 def remove_project_directory(images_root: Path, project_id: str) -> None:
     root = images_root.resolve()

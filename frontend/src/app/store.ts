@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 import type { Project, Prompt } from '../types/domain'
 import * as resourcesApi from '../lib/resourcesApi'
-import type { ProjectDto, PromptDto } from '../lib/resourcesApi'
+import type { ImageDto, ProjectDto, PromptDto } from '../lib/resourcesApi'
 
 
 const projects: Project[] = [
@@ -36,6 +36,8 @@ const prompts: Prompt[] = [
 ]
 
 export type SaveStatus = 'idle' | 'loading' | 'saving' | 'saved' | 'error' | 'offline'
+export type WorkspaceMode = 'quick' | 'project'
+export type ProjectView = 'canvas' | 'gallery'
 
 const toProject = (value: ProjectDto): Project => ({
   id: value.id,
@@ -58,9 +60,17 @@ interface AppState {
   projects: Project[]
   prompts: Prompt[]
   activeProjectId: string
+  workspaceMode: WorkspaceMode
+  projectView: ProjectView
+  unarchivedCount: number
+  selectedGalleryImage: ImageDto | null
   isLeftPanelOpen: boolean
   isRightPanelOpen: boolean
   selectProject: (projectId: string) => void
+  selectQuickCreation: () => void
+  setProjectView: (view: ProjectView) => void
+  setSelectedGalleryImage: (image: ImageDto | null) => void
+  refreshUnarchivedCount: () => Promise<void>
   toggleLeftPanel: () => void
   setLeftPanelOpen: (value: boolean) => void
   setRightPanelOpen: (value: boolean) => void
@@ -82,9 +92,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   projects,
   prompts,
   activeProjectId: projects[0].id,
+  workspaceMode: 'project',
+  projectView: 'canvas',
+  unarchivedCount: 0,
+  selectedGalleryImage: null,
   isLeftPanelOpen: true,
   isRightPanelOpen: true,
-  selectProject: (activeProjectId) => set({ activeProjectId }),
+  selectProject: (activeProjectId) => set({ activeProjectId, workspaceMode: 'project', selectedGalleryImage: null }),
+  selectQuickCreation: () => set({ workspaceMode: 'quick', selectedGalleryImage: null }),
+  setProjectView: (projectView) => set({ projectView, selectedGalleryImage: projectView === 'canvas' ? null : get().selectedGalleryImage }),
+  setSelectedGalleryImage: (selectedGalleryImage) => set({ selectedGalleryImage }),
+  refreshUnarchivedCount: async () => {
+    const values = await resourcesApi.listUnarchivedImages()
+    set({ unarchivedCount: values.length })
+  },
   toggleLeftPanel: () => set((state) => ({ isLeftPanelOpen: !state.isLeftPanelOpen })),
   setLeftPanelOpen: (isLeftPanelOpen) => set({ isLeftPanelOpen }),
   setRightPanelOpen: (isRightPanelOpen) => set({ isRightPanelOpen }),
@@ -95,15 +116,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   hydrateResources: async () => {
     set({ saveStatus: 'loading', error: null })
     try {
-      const [projectDtos, promptDtos] = await Promise.all([
+      const [projectDtos, promptDtos, unarchived] = await Promise.all([
         resourcesApi.listProjects(),
         resourcesApi.listPrompts(),
+        resourcesApi.listUnarchivedImages().catch(() => []),
       ])
       const nextProjects = projectDtos.map(toProject)
       const currentId = get().activeProjectId
       set({
         projects: nextProjects,
         prompts: promptDtos.map(toPrompt),
+        unarchivedCount: unarchived.length,
         activeProjectId: nextProjects.some((item) => item.id === currentId)
           ? currentId
           : nextProjects[0]?.id ?? '',
@@ -122,6 +145,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set((state) => ({
         projects: [...state.projects, project],
         activeProjectId: project.id,
+        workspaceMode: 'project',
         saveStatus: 'saved',
       }))
       return project

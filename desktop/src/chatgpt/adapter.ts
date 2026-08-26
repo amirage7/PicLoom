@@ -1,10 +1,10 @@
-export const CHATGPT_ADAPTER_VERSION = '2026-08-25.2'
+export const CHATGPT_ADAPTER_VERSION = '2026-08-26.1'
 
 export type PageState =
   | { kind: 'login_required'; reason: string }
   | { kind: 'ready' }
   | { kind: 'generating' }
-  | { kind: 'completed'; images: Array<{ src: string; alt: string }> }
+  | { kind: 'completed'; images: Array<{ src: string; alt: string }>; suggestedName?: string }
   | { kind: 'refused'; reason: string }
   | { kind: 'rate_limited'; reason: string }
   | { kind: 'page_changed'; diagnostics: string }
@@ -26,6 +26,28 @@ function assistantArticles(html: string): Array<{ attributes: string; body: stri
     }
   }
   return articles
+}
+
+function fixtureText(html: string): string {
+  return html
+    .replace(/<\/(?:p|div|li|h[1-6])\s*>/gi, '\n\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+}
+
+// 允许名字跨越 innerText 的软换行延续；段落空行（\n\n）或 Markdown 标记行视作段间边界。
+// 提取后压扁所有空白，再裁到 80 字符上限。
+const SUGGESTED_NAME_PATTERN = /图片名称\s*[：:]\s*([\s\S]+?)(?=\n\s*\n|\n\s*[#>*\-]|\n---|\n\*\*\*|$)/i
+const MAX_SUGGESTED_NAME_LENGTH = 80
+
+function suggestedNameFromText(text: string): string | undefined {
+  const match = SUGGESTED_NAME_PATTERN.exec(text)
+  const raw = match?.[1]
+  if (!raw) return undefined
+  const value = raw.replace(/[\s\r\n]+/g, '').trim().slice(0, MAX_SUGGESTED_NAME_LENGTH)
+  return value || undefined
 }
 
 function generatedImages(html: string): Array<{ src: string; alt: string }> {
@@ -76,20 +98,32 @@ export function inspectFixtureHtml(
   }
 
   const articles = assistantArticles(html)
-  if (articles.some((article) => /data-aic-refusal=["']true["']/i.test(article.attributes))) {
+  const baseline = new Set(assistantResponseIdsBefore)
+  const latestArticle = articles.filter((article, index) => {
+    const identifier = attribute(article.attributes, 'data-message-id') || `assistant-index-${index}`
+    return !baseline.has(identifier)
+  }).at(-1)
+  if (latestArticle && /data-aic-refusal=["']true["']/i.test(latestArticle.attributes)) {
     return { kind: 'refused', reason: 'The request was refused' }
   }
 
-  const baseline = new Set(assistantResponseIdsBefore)
-  const images = articles
-    .filter((article) => {
-      const identifier = attribute(article.attributes, 'data-message-id')
-      return identifier === null || !baseline.has(identifier)
-    })
-    .flatMap((article) => generatedImages(article.body))
-  if (images.length > 0) return { kind: 'completed', images }
-  const unmarkedImages = newLargeImages(html, imageSourcesBefore)
-  if (unmarkedImages.length > 0) return { kind: 'completed', images: unmarkedImages }
+  const suggestedName = latestArticle
+    ? suggestedNameFromText(fixtureText(latestArticle.body))
+    : undefined
+  const images = latestArticle ? generatedImages(latestArticle.body) : []
+  if (images.length > 0) {
+    return { kind: 'completed', images, ...(suggestedName ? { suggestedName } : {}) }
+  }
+  const unmarkedImages = latestArticle
+    ? newLargeImages(latestArticle.body, imageSourcesBefore)
+    : []
+  if (unmarkedImages.length > 0) {
+    return { kind: 'completed', images: unmarkedImages, ...(suggestedName ? { suggestedName } : {}) }
+  }
+  const pageImages = newLargeImages(html, imageSourcesBefore)
+  if (pageImages.length > 0) {
+    return { kind: 'completed', images: pageImages, ...(suggestedName ? { suggestedName } : {}) }
+  }
 
   if (/id=["']prompt-textarea["']|data-testid=["']composer/i.test(html)) {
     return { kind: 'ready' }
@@ -104,6 +138,13 @@ function runtimeInspectPage(
   assistantResponseIdsBefore: string[],
   imageSourcesBefore: string[],
 ): PageState {
+  const suggestedNameFromText = (text: string): string | undefined => {
+    const match = /图片名称\s*[：:]\s*([\s\S]+?)(?=\n\s*\n|\n\s*[#>*\-]|\n---|\n\*\*\*|$)/i.exec(text)
+    const raw = match?.[1]
+    if (!raw) return undefined
+    const value = raw.replace(/[\s\r\n]+/g, '').trim().slice(0, 80)
+    return value || undefined
+  }
   const login = document.querySelector(
     '[data-testid="login-button"], a[href*="/auth/login"], button[data-testid*="login"]',
   )
@@ -123,29 +164,52 @@ function runtimeInspectPage(
   const assistantResponses = Array.from(document.querySelectorAll<HTMLElement>(
     '[data-message-author-role="assistant"]',
   ))
-  const newResponses = assistantResponses.filter((response) => {
-    const identifier = response.dataset.messageId ?? response.id
-    return !identifier || !baseline.has(identifier)
+  const newResponses = assistantResponses.filter((response, index) => {
+    const identifier = response.dataset.messageId || response.id || `assistant-index-${index}`
+    return !baseline.has(identifier)
   })
+  const latestResponse = newResponses.at(-1)
+  const suggestedName = latestResponse
+    ? suggestedNameFromText(latestResponse.innerText)
+    : undefined
 
-  for (const response of newResponses) {
-    const text = response.innerText
+  if (latestResponse) {
+    const text = latestResponse.innerText
     if (
-      response.dataset.aicRefusal === 'true'
+      latestResponse.dataset.aicRefusal === 'true'
       || /cannot help with that request|can't assist with that request/i.test(text)
     ) {
       return { kind: 'refused', reason: 'The request was refused' }
     }
   }
 
-  const images = newResponses.flatMap((response) => Array.from(response.querySelectorAll<HTMLImageElement>(
+  const images = (latestResponse ? Array.from(latestResponse.querySelectorAll<HTMLImageElement>(
     'img[data-testid*="generated"], [data-testid*="generated"] img, img[alt*="Generated image"]',
-  )).map((image) => ({ src: image.currentSrc || image.src, alt: image.alt || '' })))
+  )).map((image) => ({ src: image.currentSrc || image.src, alt: image.alt || '' })) : [])
     .filter((image) => /^(blob:|data:image\/|https:\/\/)/i.test(image.src))
-  if (images.length > 0) return { kind: 'completed', images }
+  if (images.length > 0) {
+    return { kind: 'completed', images, ...(suggestedName ? { suggestedName } : {}) }
+  }
 
   const imageBaseline = new Set(imageSourcesBefore)
-  const unmarkedImages = Array.from(document.querySelectorAll<HTMLImageElement>('img'))
+  const unmarkedImages = (latestResponse
+    ? Array.from(latestResponse.querySelectorAll<HTMLImageElement>('img')).map((image) => ({
+      src: image.currentSrc || image.src,
+      alt: image.alt || '',
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+    }))
+    : [])
+    .filter((image) => (
+      image.width >= 256 && image.height >= 256 && !imageBaseline.has(image.src)
+      && /^(blob:|data:image\/|https:\/\/)/i.test(image.src)
+    ))
+    .map(({ src, alt }) => ({ src, alt }))
+  if (unmarkedImages.length > 0) {
+    return { kind: 'completed', images: unmarkedImages, ...(suggestedName ? { suggestedName } : {}) }
+  }
+
+  const pageImages = Array.from(document.querySelectorAll<HTMLImageElement>('img'))
     .map((image) => ({
       src: image.currentSrc || image.src,
       alt: image.alt || '',
@@ -157,7 +221,9 @@ function runtimeInspectPage(
       && /^(blob:|data:image\/|https:\/\/)/i.test(image.src)
     ))
     .map(({ src, alt }) => ({ src, alt }))
-  if (unmarkedImages.length > 0) return { kind: 'completed', images: unmarkedImages }
+  if (pageImages.length > 0) {
+    return { kind: 'completed', images: pageImages, ...(suggestedName ? { suggestedName } : {}) }
+  }
 
   const composer = document.querySelector(
     '#prompt-textarea, textarea[data-testid*="composer"], [contenteditable="true"][data-testid*="composer"]',
@@ -166,7 +232,7 @@ function runtimeInspectPage(
 
   return {
     kind: 'page_changed',
-    diagnostics: 'Adapter 2026-08-25.1: composer not found',
+    diagnostics: 'Adapter 2026-08-26.1: composer not found',
   }
 }
 
@@ -186,11 +252,12 @@ function isPageState(value: unknown): value is PageState {
   const state = value as Partial<PageState>
   if (state.kind === 'ready' || state.kind === 'generating') return true
   if (state.kind === 'completed') {
-    return Array.isArray(state.images) && state.images.every((image) => (
+    return (state.suggestedName === undefined || typeof state.suggestedName === 'string')
+      && Array.isArray(state.images) && state.images.every((image) => (
       typeof image === 'object' && image !== null
       && typeof (image as { src?: unknown }).src === 'string'
       && typeof (image as { alt?: unknown }).alt === 'string'
-    ))
+      ))
   }
   if (state.kind === 'login_required' || state.kind === 'refused' || state.kind === 'rate_limited') {
     return typeof state.reason === 'string'

@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { Aperture, Settings2, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Aperture, BookOpen, ChevronRight, Settings2, X } from 'lucide-react'
 
 import { IconButton } from '../components/IconButton'
 import { CanvasBoard } from '../features/canvas/CanvasBoard'
@@ -13,6 +13,7 @@ import { useResponsivePanels } from './useResponsivePanels'
 
 
 export default function App() {
+  const [promptsOpen, setPromptsOpen] = useState(false)
   const panels = useResponsivePanels()
   const hydrateResources = useAppStore((state) => state.hydrateResources)
   useEffect(() => {
@@ -46,11 +47,13 @@ export default function App() {
             <IconButton className="compact-panel-close" label="关闭导航" onClick={() => panels.closePanels()}><X size={15} /></IconButton>
           </header>
           <ProjectList />
-          <PromptLibrary />
+          <section className="prompt-library-collapsible">
+            <button type="button" aria-expanded={promptsOpen} onClick={() => setPromptsOpen((value) => !value)}><BookOpen size={15} /><span>Prompt Library</span><ChevronRight size={14} /></button>
+            {promptsOpen && <PromptLibrary />}
+          </section>
           <footer className="sidebar-footer">
-            <span className="local-dot" />
-            本地工作区
-            <span>0.1</span>
+            <button type="button" disabled title="设置将在后续版本开放"><Settings2 size={14} />设置</button>
+            <div><span className="local-dot" />本地服务<span>0.2</span></div>
           </footer>
         </nav>
       )}

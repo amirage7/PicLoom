@@ -27,7 +27,7 @@ export function desktopTask(value: api.TaskDto): ImageGenerationTask {
   const imageIds = parseImageIds(value)
   return {
     id: value.id,
-    projectId: value.project_id,
+    projectId: value.project_id ?? '',
     prompt: value.prompt,
     status: value.status,
     progressMessage: value.progress_message,
@@ -72,6 +72,7 @@ export class ChatGptDesktopProvider implements ImageProvider {
       prompt: task.prompt,
       parentImageId: task.parent_image_id,
       referenceImages,
+      transparentBackground: input.transparentBackground ?? false,
     })
     return desktopTask(await api.getGenerationTask(task.id))
   }

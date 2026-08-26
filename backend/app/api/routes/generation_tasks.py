@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
@@ -29,7 +31,13 @@ def translate_error(error: Exception) -> HTTPException:
 @router.post("", response_model=GenerationTaskResponse, status_code=status.HTTP_201_CREATED)
 def create_generation_task(payload: GenerationTaskCreate, session: Session = Depends(get_session)):
     try:
-        return generation_tasks.create_task(session, payload.project_id, payload.prompt, payload.parent_image_id)
+        return generation_tasks.create_task(
+            session,
+            payload.project_id,
+            payload.prompt,
+            payload.parent_image_id,
+            payload.reference_image_ids,
+        )
     except (ResourceNotFoundError, ValueError) as error:
         raise translate_error(error) from error
 
@@ -64,12 +72,29 @@ def update_desktop_task_state(
         raise translate_error(error) from error
 
 
+def _parse_suggested_names(raw: str | None) -> list[str | None] | None:
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, list):
+        return None
+    cleaned: list[str | None] = []
+    for item in parsed:
+        cleaned.append(item if isinstance(item, str) else None)
+    return cleaned
+
+
 @router.post("/{task_id}/complete-batch", response_model=GenerationBatchResult)
 async def complete_generation_batch(
     request: Request,
     task_id: str,
     batch_id: str = Form(...),
     source_url: str = Form(...),
+    suggested_name: str | None = Form(None),
+    suggested_names: str | None = Form(None),
     files: list[UploadFile] = File(...),
     session: Session = Depends(get_session),
 ):
@@ -88,6 +113,8 @@ async def complete_generation_batch(
             batch_id,
             source_url,
             batch_files,
+            suggested_name=suggested_name,
+            suggested_names=_parse_suggested_names(suggested_names),
         )
         return result.__dict__
     except (

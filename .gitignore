@@ -4,6 +4,7 @@
 frontend/node_modules/
 frontend/dist/
 frontend/coverage/
+frontend/.build-cache/
 
 # Chrome extension
 extension/node_modules/
@@ -14,6 +15,8 @@ extension/dist/
 desktop/node_modules/
 desktop/dist/
 desktop/release/
+desktop/release-new/
+desktop/release-failed-*/
 # Python
 backend/.venv/
 backend/.pytest_cache/
@@ -28,10 +31,16 @@ backend/**/*.py[cod]
 !.env.example
 
 # Runtime data
-data/*.sqlite
-data/*.sqlite-*
+data/*.sqlite*
+data/_t*.txt
 data/images/**
 !data/images/.gitkeep
+
+# WorkBuddy internal state (logs, memory)
+.workbuddy/
+
+# Old build artifacts
+**/dist.old/
 
 # Editors and OS
 .idea/

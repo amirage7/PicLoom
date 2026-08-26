@@ -17,6 +17,15 @@ import { createInitialCanvases } from './fixtures'
 
 
 const objectUrlReferences = new Map<string, number>()
+const projectLoadVersions = new Map<string, number>()
+const edgeDeletionRequests = new Map<string, Promise<void>>()
+let nextProjectLoadVersion = 0
+
+function bumpProjectLoadVersion(projectId: string) {
+  const version = ++nextProjectLoadVersion
+  projectLoadVersions.set(projectId, version)
+  return version
+}
 
 function retainObjectUrl(url: string) {
   objectUrlReferences.set(url, (objectUrlReferences.get(url) ?? 0) + 1)
@@ -41,8 +50,13 @@ export function resetObjectUrlRegistry() {
   objectUrlReferences.clear()
 }
 
-function syncParentIds(canvas: ProjectCanvasState): ProjectCanvasState {
-  const parentsByTarget = new Map(canvas.edges.map((edge) => [edge.target, edge.source]))
+function syncSourceIds(canvas: ProjectCanvasState): ProjectCanvasState {
+  const sourcesByTarget = new Map<string, string[]>()
+  for (const edge of canvas.edges) {
+    const sources = sourcesByTarget.get(edge.target) ?? []
+    if (!sources.includes(edge.source)) sources.push(edge.source)
+    sourcesByTarget.set(edge.target, sources)
+  }
   return {
     ...canvas,
     nodes: canvas.nodes.map((node) => ({
@@ -51,11 +65,16 @@ function syncParentIds(canvas: ProjectCanvasState): ProjectCanvasState {
         ...node.data,
         image: {
           ...node.data.image,
-          parentId: parentsByTarget.get(node.id) ?? null,
+          sourceIds: sourcesByTarget.get(node.id) ?? [],
+          parentId: sourcesByTarget.get(node.id)?.[0] ?? null,
         },
       },
     })),
   }
+}
+
+function relationEdge(source: string, target: string) {
+  return { id: `edge-${source}-${target}`, source, target, type: 'smoothstep', interactionWidth: 24 }
 }
 
 function updateCanvas(
@@ -67,7 +86,7 @@ function updateCanvas(
   return { ...canvases, [projectId]: update(canvas) }
 }
 
-function nodeFromDto(value: ImageDto): CanvasNode {
+export function nodeFromDto(value: ImageDto): CanvasNode {
   return {
     id: value.id,
     type: 'image',
@@ -82,8 +101,12 @@ function nodeFromDto(value: ImageDto): CanvasNode {
         name: value.name,
         prompt: value.prompt,
         tags: value.tags,
+        sourceIds: value.source_ids?.length ? value.source_ids : (value.parent_id ? [value.parent_id] : []),
         parentId: value.parent_id,
         createdTime: value.created_time,
+        isOnCanvas: value.is_on_canvas ?? true,
+        isFavorite: value.is_favorite ?? false,
+        sourceType: value.source_type ?? 'uploaded',
       },
     },
   }
@@ -91,13 +114,11 @@ function nodeFromDto(value: ImageDto): CanvasNode {
 
 function canvasFromDtos(values: ImageDto[]): ProjectCanvasState {
   return {
-    nodes: values.map(nodeFromDto),
-    edges: values.filter((value) => value.parent_id).map((value) => ({
-      id: `edge-${value.parent_id}-${value.id}`,
-      source: value.parent_id as string,
-      target: value.id,
-      type: 'smoothstep',
-    })),
+    nodes: values.filter((value) => value.is_on_canvas !== false).map(nodeFromDto),
+    edges: values.filter((value) => value.is_on_canvas !== false).flatMap((value) => {
+      const sourceIds = value.source_ids?.length ? value.source_ids : (value.parent_id ? [value.parent_id] : [])
+      return sourceIds.map((sourceId) => relationEdge(sourceId, value.id))
+    }),
     selectedNodeId: null,
   }
 }
@@ -111,6 +132,7 @@ interface CanvasStore {
   applyNodeChanges: (projectId: string, changes: NodeChange<CanvasNode>[]) => void
   applyEdgeChanges: (projectId: string, changes: EdgeChange[]) => void
   selectNode: (projectId: string, nodeId: string | null) => void
+  selectEdge: (projectId: string, edgeId: string) => void
   selectImportedBatch: (projectId: string, nodeIds: string[]) => void
   connectNodes: (projectId: string, connection: Connection) => void
   addUploadedImages: (projectId: string, files: readonly File[], position: XYPosition) => string[]
@@ -119,6 +141,7 @@ interface CanvasStore {
   uploadPersistedImages: (projectId: string, files: readonly File[], position: XYPosition) => Promise<string[]>
   persistPosition: (projectId: string, nodeId: string, position: XYPosition) => Promise<void>
   persistConnection: (projectId: string, source: string, target: string) => Promise<void>
+  persistEdgeDeletion: (projectId: string, source: string, target: string) => Promise<void>
   persistMetadata: (projectId: string, nodeId: string, changes: ImagePatch) => Promise<void>
   duplicatePersistedNode: (projectId: string, nodeId: string) => Promise<string>
   deletePersistedNode: (projectId: string, nodeId: string) => Promise<void>
@@ -139,17 +162,37 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       nodes: applyNodeChanges(changes, canvas.nodes),
     })),
   })),
-  applyEdgeChanges: (projectId, changes) => set((state) => ({
-    canvases: updateCanvas(state.canvases, projectId, (canvas) => syncParentIds({
-      ...canvas,
-      edges: applyEdgeChanges(changes, canvas.edges),
-    })),
-  })),
+  applyEdgeChanges: (projectId, changes) => {
+    const removedIds = new Set(changes.filter((change) => change.type === 'remove').map((change) => change.id))
+    const canvas = get().canvases[projectId]
+    const removedEdges = canvas?.edges.filter((edge) => removedIds.has(edge.id)) ?? []
+    const localChanges = changes.filter((change) => change.type !== 'remove')
+    if (localChanges.length) {
+      set((state) => ({
+        canvases: updateCanvas(state.canvases, projectId, (current) => {
+          const updated = { ...current, edges: applyEdgeChanges(localChanges, current.edges) }
+          return localChanges.some((change) => change.type !== 'select') ? syncSourceIds(updated) : updated
+        }),
+      }))
+    }
+    for (const edge of removedEdges) {
+      void get().persistEdgeDeletion(projectId, edge.source, edge.target).catch(() => undefined)
+    }
+  },
   selectNode: (projectId, nodeId) => set((state) => ({
     canvases: updateCanvas(state.canvases, projectId, (canvas) => ({
       ...canvas,
       selectedNodeId: nodeId,
       nodes: canvas.nodes.map((node) => ({ ...node, selected: node.id === nodeId })),
+      edges: canvas.edges.map((edge) => ({ ...edge, selected: false })),
+    })),
+  })),
+  selectEdge: (projectId, edgeId) => set((state) => ({
+    canvases: updateCanvas(state.canvases, projectId, (canvas) => ({
+      ...canvas,
+      selectedNodeId: null,
+      nodes: canvas.nodes.map((node) => ({ ...node, selected: false })),
+      edges: canvas.edges.map((edge) => ({ ...edge, selected: edge.id === edgeId })),
     })),
   })),
   selectImportedBatch: (projectId, nodeIds) => {
@@ -161,6 +204,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
           ...canvas,
           selectedNodeId: first,
           nodes: canvas.nodes.map((node) => ({ ...node, selected: requested.has(node.id) })),
+          edges: canvas.edges.map((edge) => ({ ...edge, selected: false })),
         }
       }),
     }))
@@ -175,18 +219,14 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         const targetExists = canvas.nodes.some((node) => node.id === target)
         if (!sourceExists || !targetExists) return canvas
 
-        const withoutOldIncoming = canvas.edges.filter((edge) => edge.target !== target)
-        const duplicate = withoutOldIncoming.some(
+        const duplicate = canvas.edges.some(
           (edge) => edge.source === source && edge.target === target,
         )
         if (duplicate) return canvas
 
-        return syncParentIds({
+        return syncSourceIds({
           ...canvas,
-          edges: [
-            ...withoutOldIncoming,
-            { id: `edge-${source}-${target}`, source, target, type: 'smoothstep' },
-          ],
+          edges: [...canvas.edges, relationEdge(source, target)],
         })
       }),
     }))
@@ -217,6 +257,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
               name: file.name.replace(/\.[^.]+$/, '') || '未命名图片',
               prompt: '尚未添加 Prompt',
               tags: [],
+              sourceIds: [],
               parentId: null,
               createdTime: new Date().toISOString(),
             },
@@ -272,6 +313,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
           ...source.data.image,
           name: `${source.data.image.name} 副本`,
           id,
+          sourceIds: [],
           parentId: null,
           createdTime: new Date().toISOString(),
         },
@@ -294,7 +336,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (node.data.image.imageSource === 'upload') releaseObjectUrl(node.data.image.imageUrl)
 
     set((state) => ({
-      canvases: updateCanvas(state.canvases, projectId, (canvas) => syncParentIds({
+      canvases: updateCanvas(state.canvases, projectId, (canvas) => syncSourceIds({
         ...canvas,
         selectedNodeId: canvas.selectedNodeId === nodeId ? null : canvas.selectedNodeId,
         nodes: canvas.nodes.filter((item) => item.id !== nodeId),
@@ -304,12 +346,15 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     }))
   },
   loadCanvas: async (projectId) => {
+    const loadVersion = bumpProjectLoadVersion(projectId)
     useAppStore.getState().setSaveState('loading')
     try {
       const values = await resourcesApi.listImages(projectId)
+      if (projectLoadVersions.get(projectId) !== loadVersion) return
       set((state) => ({ canvases: { ...state.canvases, [projectId]: canvasFromDtos(values) }, error: null }))
       useAppStore.getState().setSaveState('saved')
     } catch (error) {
+      if (projectLoadVersions.get(projectId) !== loadVersion) return
       const message = error instanceof Error ? error.message : '画布加载失败'
       set({ error: message })
       useAppStore.getState().setSaveState('offline', message)
@@ -358,21 +403,16 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     }
   },
   persistConnection: async (projectId, source, target) => {
+    bumpProjectLoadVersion(projectId)
     useAppStore.getState().setSaveState('saving')
     try {
-      const value = await resourcesApi.patchImage(target, { parent_id: source })
-      set((state) => ({ canvases: updateCanvas(state.canvases, projectId, (canvas) => syncParentIds({
+      await resourcesApi.createImageRelation(source, target)
+      bumpProjectLoadVersion(projectId)
+      set((state) => ({ canvases: updateCanvas(state.canvases, projectId, (canvas) => syncSourceIds({
         ...canvas,
-        nodes: canvas.nodes.map((node) => node.id === target ? { ...nodeFromDto(value), selected: node.selected } : node),
-        edges: [
-          ...canvas.edges.filter((edge) => edge.target !== target),
-          ...(value.parent_id ? [{
-            id: `edge-${value.parent_id}-${value.id}`,
-            source: value.parent_id,
-            target: value.id,
-            type: 'smoothstep',
-          }] : []),
-        ],
+        edges: canvas.edges.some((edge) => edge.source === source && edge.target === target)
+          ? canvas.edges
+          : [...canvas.edges, relationEdge(source, target)],
       })) }))
       useAppStore.getState().setSaveState('saved')
     } catch (error) {
@@ -381,6 +421,40 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       useAppStore.getState().setSaveState('error', message)
       throw error
     }
+  },
+  persistEdgeDeletion: (projectId, source, target) => {
+    const requestKey = `${projectId}\u0000${source}\u0000${target}`
+    const existing = edgeDeletionRequests.get(requestKey)
+    if (existing) return existing
+
+    bumpProjectLoadVersion(projectId)
+    set((state) => ({
+      canvases: updateCanvas(state.canvases, projectId, (canvas) => ({
+        ...canvas,
+        edges: canvas.edges.map((edge) => edge.source === source && edge.target === target
+          ? { ...edge, selected: false }
+          : edge),
+      })),
+    }))
+    useAppStore.getState().setSaveState('saving')
+    const request = (async () => {
+      try {
+        await resourcesApi.deleteImageRelation(source, target)
+        bumpProjectLoadVersion(projectId)
+        set((state) => ({ canvases: updateCanvas(state.canvases, projectId, (canvas) => syncSourceIds({
+          ...canvas,
+          edges: canvas.edges.filter((edge) => edge.source !== source || edge.target !== target),
+        })) }))
+        useAppStore.getState().setSaveState('saved')
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '关系删除失败'
+        set({ error: message })
+        useAppStore.getState().setSaveState('error', message)
+        throw error
+      }
+    })().finally(() => edgeDeletionRequests.delete(requestKey))
+    edgeDeletionRequests.set(requestKey, request)
+    return request
   },
   persistMetadata: async (projectId, nodeId, changes) => {
     useAppStore.getState().setSaveState('saving')
@@ -411,8 +485,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   deletePersistedNode: async (projectId, nodeId) => {
     useAppStore.getState().setSaveState('saving')
     try {
-      await resourcesApi.deleteImage(nodeId)
-      set((state) => ({ canvases: updateCanvas(state.canvases, projectId, (canvas) => syncParentIds({ ...canvas, selectedNodeId: canvas.selectedNodeId === nodeId ? null : canvas.selectedNodeId, nodes: canvas.nodes.filter((node) => node.id !== nodeId), edges: canvas.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId) })) }))
+      await resourcesApi.patchImage(nodeId, { is_on_canvas: false })
+      set((state) => ({ canvases: updateCanvas(state.canvases, projectId, (canvas) => syncSourceIds({ ...canvas, selectedNodeId: canvas.selectedNodeId === nodeId ? null : canvas.selectedNodeId, nodes: canvas.nodes.filter((node) => node.id !== nodeId), edges: canvas.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId) })) }))
       useAppStore.getState().setSaveState('saved')
     } catch (error) {
       const message = error instanceof Error ? error.message : '图片删除失败'
@@ -421,5 +495,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       throw error
     }
   },
-  reset: () => set({ canvases: createInitialCanvases(), activeTool: 'select', error: null }),
+  reset: () => {
+    projectLoadVersions.clear()
+    edgeDeletionRequests.clear()
+    set({ canvases: createInitialCanvases(), activeTool: 'select', error: null })
+  },
 }))

@@ -1,10 +1,14 @@
-import { Check, Copy, Download, Expand, Image, Info, Link2, Minus, Plus, Tags, Trash2, X } from 'lucide-react'
+import { Check, Copy, Download, Eraser, Expand, Image, Info, Link2, Minus, Plus, Tags, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { IconButton } from '../../components/IconButton'
 import { useAppStore } from '../../app/store'
+import * as resourcesApi from '../../lib/resourcesApi'
 import { getDesktopBridge } from '../desktop/desktopBridge'
-import { useCanvasStore } from '../canvas/store/canvasStore'
+import { nodeFromDto, useCanvasStore } from '../canvas/store/canvasStore'
+import { useGenerationStore } from '../generation/generationStore'
+
+const REMOVE_BACKGROUND_PROMPT = '移除此图像的背景。保持所有前景主体不变且完整无损，边缘干净平滑。将背景设为透明。'
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -19,14 +23,18 @@ interface ImageInspectorProps {
 
 export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
   const projectId = useAppStore((state) => state.activeProjectId)
+  const selectedGalleryImage = useAppStore((state) => state.selectedGalleryImage)
+  const setSelectedGalleryImage = useAppStore((state) => state.setSelectedGalleryImage)
   const canvas = useCanvasStore((state) => state.canvases[projectId])
-  const selected = canvas?.nodes.find((node) => node.id === canvas.selectedNodeId)
+  const canvasSelected = canvas?.nodes.find((node) => node.id === canvas.selectedNodeId)
+  const selected = selectedGalleryImage ? nodeFromDto(selectedGalleryImage) : canvasSelected
   const updateImage = useCanvasStore((state) => state.updateImage)
   const duplicateNode = useCanvasStore((state) => state.duplicateNode)
   const deleteNode = useCanvasStore((state) => state.deleteNode)
   const persistMetadata = useCanvasStore((state) => state.persistMetadata)
   const duplicatePersistedNode = useCanvasStore((state) => state.duplicatePersistedNode)
   const deletePersistedNode = useCanvasStore((state) => state.deletePersistedNode)
+  const enqueueQuickAction = useGenerationStore((state) => state.enqueueQuickAction)
   const [imageName, setImageName] = useState('')
   const [nameError, setNameError] = useState<string | null>(null)
   const [savingName, setSavingName] = useState(false)
@@ -37,6 +45,8 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
   const [viewerOpen, setViewerOpen] = useState(false)
   const [zoom, setZoom] = useState<'fit' | number>('fit')
   const [saveError, setSaveError] = useState<string | null>(null)
+  const sourceIds = selected?.data.image.sourceIds ?? (selected?.data.image.parentId ? [selected.data.image.parentId] : [])
+  const sourceNames = sourceIds.map((sourceId) => canvas?.nodes.find((node) => node.id === sourceId)?.data.image.name ?? '已删除')
 
   useEffect(() => {
     setImageName(selected?.data.image.name ?? '')
@@ -68,12 +78,22 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
 
   const save = () => {
     if (!selected) return
-    updateImage(projectId, selected.id, {
+    const metadata = {
       prompt: prompt.trim() || '尚未添加 Prompt',
-      tags: tagsText.split(/[,，]/),
+      tags: tagsText.split(/[,，]/).map((tag) => tag.trim()).filter((tag, index, values) => tag && values.indexOf(tag) === index),
+    }
+    if (selectedGalleryImage) {
+      void resourcesApi.patchImage(selected.id, metadata).then(setSelectedGalleryImage).catch((error) => {
+        setSaveError(error instanceof Error ? error.message : '图片信息保存失败')
+      })
+      return
+    }
+    updateImage(projectId, selected.id, {
+      prompt: metadata.prompt,
+      tags: metadata.tags,
     })
     if (selected.data.image.imageSource === 'stored') {
-      void persistMetadata(projectId, selected.id, { prompt: prompt.trim() || '尚未添加 Prompt', tags: tagsText.split(/[,，]/) })
+      void persistMetadata(projectId, selected.id, metadata)
     }
   }
 
@@ -97,7 +117,10 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
     setSavingName(true)
     setNameError(null)
     try {
-      if (selected.data.image.imageSource === 'stored') {
+      if (selectedGalleryImage) {
+        const updated = await resourcesApi.patchImage(selected.id, { name: nextName })
+        setSelectedGalleryImage(updated)
+      } else if (selected.data.image.imageSource === 'stored') {
         await persistMetadata(projectId, selected.id, { name: nextName })
       } else {
         updateImage(projectId, selected.id, { name: nextName })
@@ -139,6 +162,17 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
     }
   }
 
+  const removeBackground = () => {
+    if (!selected) return
+    const reference = { imageId: selected.id, name: selected.data.image.name }
+    enqueueQuickAction({
+      projectId: selectedGalleryImage?.project_id ?? projectId,
+      prompt: `@${reference.name} ${REMOVE_BACKGROUND_PROMPT}`,
+      referenceImages: [reference],
+      transparentBackground: false,
+    })
+  }
+
   return (
     <aside id={id} className="inspector-panel" aria-label="图片详情">
       <header className="inspector-header"><h2>图片详情</h2>{onClose && <IconButton className="compact-panel-close" label="关闭图片详情" onClick={onClose}><X size={15} /></IconButton>}</header>
@@ -162,6 +196,11 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
           </button>
           <div className="inspector-media-actions">
             <button type="button" onClick={() => void saveOriginal()}><Download size={14} />保存原图</button>
+            {getDesktopBridge() && (
+              <button className="inspector-remove-background" type="button" onClick={removeBackground}>
+                <Eraser size={14} />移除背景
+              </button>
+            )}
           </div>
           {saveError && <div className="inspector-save-error" role="alert">{saveError}</div>}
           <section className="inspector-section inspector-name-section">
@@ -198,14 +237,24 @@ export function ImageInspector({ id, onClose }: ImageInspectorProps = {}) {
             <dl>
               <div><dt>文件</dt><dd>{selected.data.image.fileName}</dd></div>
               <div><dt>创建</dt><dd>{formatDate(selected.data.image.createdTime)}</dd></div>
-              <div><dt>父版本</dt><dd>{selected.data.image.parentId ? canvas.nodes.find((node) => node.id === selected.data.image.parentId)?.data.image.name ?? '已删除' : '初始版本'}</dd></div>
-              <div><dt>子版本</dt><dd>{canvas.edges.filter((edge) => edge.source === selected.id).length}</dd></div>
+              <div><dt>来源图片</dt><dd title={sourceNames.join('、')}>{sourceNames.length ? sourceNames.join('、') : '无（初始图片）'}</dd></div>
+              <div><dt>派生图片</dt><dd>{new Set((canvas?.edges ?? []).filter((edge) => edge.source === selected.id).map((edge) => edge.target)).size}</dd></div>
             </dl>
           </section>
           <footer className="inspector-actions">
-            <button type="button" onClick={() => selected.data.image.imageSource === 'stored' ? void duplicatePersistedNode(projectId, selected.id) : duplicateNode(projectId, selected.id)}><Copy size={14} />复制版本</button>
+            <button type="button" onClick={() => selectedGalleryImage
+              ? void resourcesApi.duplicateImage(selected.id).then(setSelectedGalleryImage)
+              : selected.data.image.imageSource === 'stored'
+                ? void duplicatePersistedNode(projectId, selected.id)
+                : duplicateNode(projectId, selected.id)
+            }><Copy size={14} />复制版本</button>
             {confirmingDelete ? (
-              <div className="inspector-delete-confirm"><span>确定删除？</span><button type="button" onClick={() => selected.data.image.imageSource === 'stored' ? void deletePersistedNode(projectId, selected.id) : deleteNode(projectId, selected.id)}>删除</button><button type="button" onClick={() => setConfirmingDelete(false)}>取消</button></div>
+              <div className="inspector-delete-confirm"><span>确定删除？</span><button type="button" onClick={() => selectedGalleryImage
+                ? void resourcesApi.deleteImage(selected.id).then(() => setSelectedGalleryImage(null))
+                : selected.data.image.imageSource === 'stored'
+                  ? void deletePersistedNode(projectId, selected.id)
+                  : deleteNode(projectId, selected.id)
+              }>删除</button><button type="button" onClick={() => setConfirmingDelete(false)}>取消</button></div>
             ) : (
               <button className="danger-text" type="button" onClick={() => setConfirmingDelete(true)}><Trash2 size={14} />删除</button>
             )}

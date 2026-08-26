@@ -11,10 +11,11 @@ export interface DesktopReferenceImage {
 
 export interface DesktopGenerationRequest {
   taskId: string
-  projectId: string
+  projectId: string | null
   prompt: string
   parentImageId: string | null
   referenceImages: DesktopReferenceImage[]
+  transparentBackground: boolean
 }
 
 export interface DesktopGenerationEvent {

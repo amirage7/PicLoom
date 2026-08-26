@@ -43,7 +43,7 @@ export function ImageNode({ data, selected }: NodeProps<CanvasNode>) {
           {confirmingDelete ? (
             <>
               <span>确认删除？</span>
-              <IconButton label="确认删除" onClick={() => image.imageSource === 'stored' ? void deletePersistedNode(image.projectId, image.id) : deleteNode(image.projectId, image.id)}>
+              <IconButton label="确认移出画布" onClick={() => image.projectId && (image.imageSource === 'stored' ? void deletePersistedNode(image.projectId, image.id) : deleteNode(image.projectId, image.id))}>
                 <Check size={13} />
               </IconButton>
               <IconButton label="取消删除" onClick={() => setConfirmingDelete(false)}>
@@ -52,10 +52,10 @@ export function ImageNode({ data, selected }: NodeProps<CanvasNode>) {
             </>
           ) : (
             <>
-              <IconButton label="复制节点" onClick={() => image.imageSource === 'stored' ? void duplicatePersistedNode(image.projectId, image.id) : duplicateNode(image.projectId, image.id)}>
+              <IconButton label="复制节点" onClick={() => image.projectId && (image.imageSource === 'stored' ? void duplicatePersistedNode(image.projectId, image.id) : duplicateNode(image.projectId, image.id))}>
                 <Copy size={13} />
               </IconButton>
-              <IconButton label="删除节点" onClick={() => setConfirmingDelete(true)}>
+              <IconButton label="删除节点" title="仅从画布移除，不删除图片文件" onClick={() => setConfirmingDelete(true)}>
                 <Trash2 size={13} />
               </IconButton>
             </>

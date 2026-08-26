@@ -3,8 +3,8 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_session
-from app.schemas.images import ImageResponse, ImageUpdate
-from app.services import image_resources
+from app.schemas.images import ImageRelationCreate, ImageRelationResponse, ImageResponse, ImageUpdate
+from app.services import image_relations, image_resources
 from app.services.image_names import ImageNameConflictError, ImageNameValidationError
 from app.services.image_storage import ImageStorageError, MAX_IMAGE_BYTES
 from app.services.resources import ResourceNotFoundError
@@ -38,6 +38,35 @@ def get_images(project_id: str, session: Session = Depends(get_session)):
         raise translate_error(error) from error
 
 
+@router.get("/unarchived/images", response_model=list[ImageResponse])
+def get_unarchived_images(session: Session = Depends(get_session)):
+    return image_resources.list_unarchived_images(session)
+
+
+@router.post("/image-relations", response_model=ImageRelationResponse)
+def post_image_relation(payload: ImageRelationCreate, session: Session = Depends(get_session)):
+    try:
+        relation = image_relations.create_relation(
+            session, payload.source_id, payload.target_id
+        )
+        return image_relations.serialize_relation(relation)
+    except (ResourceNotFoundError, ImageRelationshipError) as error:
+        raise translate_error(error) from error
+
+
+@router.delete(
+    "/image-relations/{source_id}/{target_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_image_relation(
+    source_id: str,
+    target_id: str,
+    session: Session = Depends(get_session),
+) -> Response:
+    image_relations.delete_relation(session, source_id, target_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post("/projects/{project_id}/images", response_model=ImageResponse, status_code=status.HTTP_201_CREATED)
 async def post_image(
     request: Request,
@@ -56,6 +85,23 @@ async def post_image(
         raise translate_error(error) from error
 
 
+@router.post("/unarchived/images", response_model=ImageResponse, status_code=status.HTTP_201_CREATED)
+async def post_unarchived_image(
+    request: Request,
+    file: UploadFile = File(...),
+    prompt: str = Form(""),
+    session: Session = Depends(get_session),
+):
+    content = await file.read(MAX_IMAGE_BYTES + 1)
+    try:
+        return image_resources.create_image(
+            session, request.app.state.settings.data_dir, None, content,
+            file.filename or "image", prompt, 0, 0, None,
+        )
+    except (ImageStorageError, ImageRelationshipError) as error:
+        raise translate_error(error) from error
+
+
 @router.get("/images/{image_id}/content", response_class=FileResponse)
 def get_image_content(request: Request, image_id: str, session: Session = Depends(get_session)):
     try:
@@ -66,8 +112,9 @@ def get_image_content(request: Request, image_id: str, session: Session = Depend
 
 
 @router.patch("/images/{image_id}", response_model=ImageResponse)
-def patch_image(image_id: str, payload: ImageUpdate, session: Session = Depends(get_session)):
+def patch_image(request: Request, image_id: str, payload: ImageUpdate, session: Session = Depends(get_session)):
     try:
+        session.info["data_dir"] = request.app.state.settings.data_dir
         return image_resources.update_image(session, image_id, payload)
     except (ResourceNotFoundError, ImageRelationshipError, ImageNameConflictError, ImageNameValidationError) as error:
         raise translate_error(error) from error

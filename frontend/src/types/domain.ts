@@ -25,15 +25,19 @@ export interface Prompt {
 
 export interface CanvasImage {
   id: string
-  projectId: string
+  projectId: string | null
   imageUrl: string
   imageSource: 'fixture' | 'upload' | 'stored'
   fileName: string
   name: string
   prompt: string
   tags: string[]
+  sourceIds: string[]
   parentId: string | null
   createdTime: string
+  isOnCanvas?: boolean
+  isFavorite?: boolean
+  sourceType?: 'generated' | 'uploaded'
 }
 
 export interface CanvasNodeData extends Record<string, unknown> {

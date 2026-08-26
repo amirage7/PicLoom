@@ -16,6 +16,8 @@ interface RightPanelProps {
 export function RightPanel({ id, onClose }: RightPanelProps) {
   const desktopMode = getDesktopBridge() !== null
   const projectId = useAppStore((state) => state.activeProjectId)
+  const workspaceMode = useAppStore((state) => state.workspaceMode)
+  const selectedGalleryImage = useAppStore((state) => state.selectedGalleryImage)
   const generationPanelOpen = useGenerationStore((state) => state.isPanelOpen)
   const setGenerationPanelOpen = useGenerationStore((state) => state.setPanelOpen)
   const [activeTab, setActiveTab] = useState<'details' | 'chatgpt'>('details')
@@ -23,6 +25,10 @@ export function RightPanel({ id, onClose }: RightPanelProps) {
   useEffect(() => {
     if (desktopMode && generationPanelOpen) setActiveTab('chatgpt')
   }, [desktopMode, generationPanelOpen])
+
+  useEffect(() => {
+    if (selectedGalleryImage) setActiveTab('details')
+  }, [selectedGalleryImage])
 
   if (!desktopMode) return <ImageInspector id={id} onClose={onClose} />
 
@@ -55,7 +61,7 @@ export function RightPanel({ id, onClose }: RightPanelProps) {
         <ImageInspector id={id} />
       ) : (
         <aside id={id} className="inspector-panel desktop-chat-panel" aria-label="ChatGPT 生图">
-          <ChatGptGenerationPanel projectId={projectId} />
+          <ChatGptGenerationPanel projectId={workspaceMode === 'quick' ? null : projectId} />
         </aside>
       )}
     </div>

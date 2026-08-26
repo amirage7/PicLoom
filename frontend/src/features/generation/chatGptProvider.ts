@@ -1,7 +1,7 @@
 import * as api from './generationApi'
 import type { GenerateImageInput, ImageGenerationTask, ImageProvider, ProviderAvailability } from './types'
 
-export const toTask = (value: api.TaskDto): ImageGenerationTask => ({ id: value.id, projectId: value.project_id, prompt: value.prompt, status: value.status, progressMessage: value.progress_message, chatUrl: value.chat_url, imageId: value.image_id, imageIds: value.image_id ? [value.image_id] : [], errorCode: value.error_code, recoverable: false })
+export const toTask = (value: api.TaskDto): ImageGenerationTask => ({ id: value.id, projectId: value.project_id ?? '', prompt: value.prompt, status: value.status, progressMessage: value.progress_message, chatUrl: value.chat_url, imageId: value.image_id, imageIds: value.image_id ? [value.image_id] : [], errorCode: value.error_code, recoverable: false })
 
 export class ChatGptImageProvider implements ImageProvider {
   readonly id = 'chatgpt-web'

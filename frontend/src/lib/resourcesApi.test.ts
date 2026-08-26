@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { listProjects, uploadImage } from './resourcesApi'
+import { createImageRelation, deleteImageRelation, listProjects, uploadImage } from './resourcesApi'
 
 
 const project = {
@@ -41,5 +41,21 @@ describe('resourcesApi', () => {
     ))
 
     await expect(listProjects()).rejects.toThrow('非法图片')
+  })
+
+  it('creates and deletes one image relation through dedicated endpoints', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ source_id: 'source-a', target_id: 'result' }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createImageRelation('source-a', 'result')
+    await deleteImageRelation('source-a', 'result')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/image-relations', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ source_id: 'source-a', target_id: 'result' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/image-relations/source-a/result', expect.objectContaining({ method: 'DELETE' }))
   })
 })

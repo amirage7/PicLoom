@@ -6,6 +6,7 @@ interface BatchInput {
   batchId: string
   sourceUrl: string
   images: CollectedImage[]
+  suggestedNames?: string[]
 }
 
 async function responseJson<T>(response: Response): Promise<T> {
@@ -74,6 +75,9 @@ export class GenerationBackendClient {
     const body = new FormData()
     body.append('batch_id', input.batchId)
     body.append('source_url', input.sourceUrl)
+    if (input.suggestedNames?.some((name) => name.trim())) {
+      body.append('suggested_names', JSON.stringify(input.suggestedNames.map((name) => name ?? '')))
+    }
     for (const image of [...input.images].sort((left, right) => left.order - right.order)) {
       const copy = Uint8Array.from(image.bytes)
       body.append(

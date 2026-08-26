@@ -30,7 +30,7 @@ describe('canvas store', () => {
     expect(node?.data.image.id).toBe(id)
   })
 
-  it('replaces a child incoming relationship', () => {
+  it('adds a child incoming relationship without replacing existing sources', () => {
     useCanvasStore
       .getState()
       .connectNodes('future-city', {
@@ -42,9 +42,9 @@ describe('canvas store', () => {
 
     const canvas = useCanvasStore.getState().canvases['future-city']
 
-    expect(canvas.edges.filter((edge) => edge.target === 'transit-hub')).toHaveLength(1)
-    expect(canvas.nodes.find((node) => node.id === 'transit-hub')?.data.image.parentId)
-      .toBe('city-overview')
+    expect(canvas.edges.filter((edge) => edge.target === 'transit-hub')).toHaveLength(2)
+    expect(canvas.nodes.find((node) => node.id === 'transit-hub')?.data.image.sourceIds)
+      .toEqual(['street-level', 'city-overview'])
   })
 
   it('rejects self connections', () => {
@@ -62,6 +62,17 @@ describe('canvas store', () => {
     expect(useCanvasStore.getState().canvases['future-city'].edges).toEqual(before)
   })
 
+  it('selects one relation and clears the selected image', () => {
+    useCanvasStore.getState().selectNode('future-city', 'city-overview')
+
+    useCanvasStore.getState().selectEdge('future-city', 'edge-city-overview-street-level')
+
+    const canvas = useCanvasStore.getState().canvases['future-city']
+    expect(canvas.selectedNodeId).toBeNull()
+    expect(canvas.nodes.every((node) => !node.selected)).toBe(true)
+    expect(canvas.edges.find((edge) => edge.id === 'edge-city-overview-street-level')?.selected).toBe(true)
+  })
+
   it('deletes a node, connected edges, and orphaned parent references', () => {
     useCanvasStore.getState().deleteNode('future-city', 'street-level')
 
@@ -71,6 +82,7 @@ describe('canvas store', () => {
     expect(canvas.edges.some((edge) => edge.source === 'street-level' || edge.target === 'street-level'))
       .toBe(false)
     expect(canvas.nodes.find((node) => node.id === 'transit-hub')?.data.image.parentId).toBeNull()
+    expect(canvas.nodes.find((node) => node.id === 'transit-hub')?.data.image.sourceIds).toEqual([])
   })
 
   it('releases an uploaded object URL only after its final copy is deleted', () => {

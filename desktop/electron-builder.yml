@@ -2,6 +2,7 @@ appId: com.aiimagecanvas.desktop
 productName: AI Image Canvas
 artifactName: ${productName}-Setup-${version}.${ext}
 asar: true
+electronDist: node_modules/electron/dist
 directories:
   output: release
 files:

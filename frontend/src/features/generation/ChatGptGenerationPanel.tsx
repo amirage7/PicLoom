@@ -1,10 +1,13 @@
-import { Eye, EyeOff, RefreshCw, RotateCcw, Send, Square } from 'lucide-react'
+import { Eraser, Eye, EyeOff, RefreshCw, RotateCcw, Send, Square } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 
 import { useCanvasStore } from '../canvas/store/canvasStore'
 import { getDesktopBridge } from '../desktop/desktopBridge'
 import { ImageMentionMenu } from './ImageMentionMenu'
-import { createGenerationTask } from './generationApi'
+import { cancelGenerationTask, createGenerationTask } from './generationApi'
+import { ensureDesktopGenerationEvents, useGenerationStore } from './generationStore'
+import type { DesktopReferenceImage } from '../desktop/types'
+import * as resourcesApi from '../../lib/resourcesApi'
 import {
   filterMentionCandidates,
   findActiveMention,
@@ -15,30 +18,46 @@ import {
 } from './imageMentions'
 
 interface ChatGptGenerationPanelProps {
-  projectId: string
+  projectId: string | null
 }
 
 export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProps) {
   const bridge = getDesktopBridge()
   const viewSlotRef = useRef<HTMLDivElement>(null)
   const promptRef = useRef<HTMLTextAreaElement>(null)
-  const taskIdRef = useRef<string | null>(null)
-  const canvas = useCanvasStore((state) => state.canvases[projectId])
-  const [prompt, setPrompt] = useState('')
+  const startingRef = useRef(false)
+  const canvas = useCanvasStore((state) => projectId ? state.canvases[projectId] : undefined)
+  const prompt = useGenerationStore((state) => state.prompt)
+  const setPrompt = useGenerationStore((state) => state.setPrompt)
+  const transparentBackground = useGenerationStore((state) => state.transparentBackground)
+  const setTransparentBackground = useGenerationStore((state) => state.setTransparentBackground)
+  const quickAction = useGenerationStore((state) => state.quickAction)
+  const consumeQuickAction = useGenerationStore((state) => state.consumeQuickAction)
+  const pending = useGenerationStore((state) => state.desktopBusy)
+  const taskId = useGenerationStore((state) => state.desktopTaskId ?? state.desktopRecoverableTaskId)
+  const generationEvent = useGenerationStore((state) => state.desktopEvent)
+  const acquireDesktopGeneration = useGenerationStore((state) => state.acquireDesktopGeneration)
+  const bindDesktopTask = useGenerationStore((state) => state.bindDesktopTask)
+  const releaseDesktopGeneration = useGenerationStore((state) => state.releaseDesktopGeneration)
   const [caret, setCaret] = useState(0)
   const [mentionIndex, setMentionIndex] = useState(0)
   const [viewVisible, setViewVisible] = useState(false)
-  const [pending, setPending] = useState(false)
-  const [taskId, setTaskId] = useState<string | null>(null)
   const [recoverable, setRecoverable] = useState(false)
   const [message, setMessage] = useState('登录后，可在这里直接使用普通 Chat 生成图片。')
   const [error, setError] = useState<string | null>(null)
+  const [scopeImages, setScopeImages] = useState<MentionImage[]>([])
 
-  const mentionImages: MentionImage[] = (canvas?.nodes ?? []).map((node) => ({
+  useEffect(() => {
+    const request = projectId ? resourcesApi.listImages(projectId) : resourcesApi.listUnarchivedImages()
+    void request.then((values) => setScopeImages(values.map((image) => ({ imageId: image.id, name: image.name, imageUrl: image.image_url })))).catch(() => setScopeImages([]))
+  }, [projectId])
+
+  const canvasImages: MentionImage[] = (canvas?.nodes ?? []).map((node) => ({
     imageId: node.id,
     name: node.data.image.name,
     imageUrl: node.data.image.imageUrl,
   }))
+  const mentionImages = scopeImages.length > 0 ? scopeImages : canvasImages
   const activeMention = findActiveMention(prompt, caret)
   const mentionCandidates = activeMention
     ? filterMentionCandidates(mentionImages, activeMention.query)
@@ -84,26 +103,22 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
   }, [bridge])
 
   useEffect(() => {
-    if (!bridge) return
-    return bridge.onGenerationEvent((generationEvent) => {
-      if (taskIdRef.current && generationEvent.taskId !== taskIdRef.current) return
-      taskIdRef.current = generationEvent.taskId
-      setTaskId(generationEvent.taskId)
-      setMessage(generationEvent.message)
-      setRecoverable(generationEvent.recoverable)
-      const active = !['completed', 'failed', 'cancelled', 'refused', 'rate_limited', 'page_changed']
-        .includes(generationEvent.state)
-      setPending(active)
-      if (generationEvent.state === 'login_required' || generationEvent.state === 'page_changed') {
-        setViewVisible(true)
-      }
-      if (generationEvent.state === 'failed' || generationEvent.state === 'refused') {
-        setError(generationEvent.message)
-      } else {
-        setError(null)
-      }
-    })
+    if (bridge) ensureDesktopGenerationEvents(bridge)
   }, [bridge])
+
+  useEffect(() => {
+    if (!generationEvent) return
+    setMessage(generationEvent.message)
+    setRecoverable(generationEvent.recoverable)
+    if (generationEvent.state === 'login_required' || generationEvent.state === 'page_changed') {
+      setViewVisible(true)
+    }
+    if (generationEvent.state === 'failed' || generationEvent.state === 'refused') {
+      setError(generationEvent.message)
+    } else {
+      setError(null)
+    }
+  }, [generationEvent])
 
   const selectMention = (image: MentionImage) => {
     if (!activeMention) return
@@ -134,37 +149,72 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
     }
   }
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    const compactPrompt = prompt.trim()
-    if (!bridge || !compactPrompt || pending) return
-    const invalidMentions = findInvalidMentions(compactPrompt, mentionImages)
-    if (invalidMentions.length > 0) {
-      setError(`找不到引用图片：@${invalidMentions.join('、@')}。请重新输入 @ 选择图片。`)
+  const startGeneration = useCallback(async (
+    requestedPrompt: string,
+    requestedReferences?: DesktopReferenceImage[],
+    requestedTransparentBackground = transparentBackground,
+  ) => {
+    const compactPrompt = requestedPrompt.trim()
+    if (!compactPrompt) return
+    if (!bridge) {
+      setError('当前未连接桌面版 ChatGPT，Prompt 已保留，可连接后手动重试。')
       return
     }
-    const references = resolveImageMentions(compactPrompt, mentionImages)
-    setPending(true)
+    if (!requestedReferences) {
+      const invalidMentions = findInvalidMentions(compactPrompt, mentionImages)
+      if (invalidMentions.length > 0) {
+        setError(`找不到引用图片：@${invalidMentions.join('、@')}。请重新输入 @ 选择图片。`)
+        return
+      }
+    }
+    const references = requestedReferences ?? resolveImageMentions(compactPrompt, mentionImages)
+    if (startingRef.current || !acquireDesktopGeneration()) {
+      setError('当前有图片正在生成，请完成或取消后再试。')
+      return
+    }
+    startingRef.current = true
+    setRecoverable(false)
     setError(null)
     setMessage('正在把 Prompt 发送到 ChatGPT…')
+    let createdTaskId: string | null = null
     try {
       const parentImageId = references[0]?.imageId
       const task = await createGenerationTask(projectId, compactPrompt, parentImageId)
       const nextTaskId = task.id
-      taskIdRef.current = nextTaskId
-      setTaskId(nextTaskId)
+      createdTaskId = nextTaskId
+      bindDesktopTask(nextTaskId)
       await bridge.startGeneration({
         taskId: nextTaskId,
         projectId,
         prompt: compactPrompt,
         parentImageId: parentImageId ?? null,
         referenceImages: references,
+        transparentBackground: requestedTransparentBackground,
       })
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '暂时无法启动生成任务')
+      if (createdTaskId) {
+        await cancelGenerationTask(createdTaskId).catch(() => undefined)
+      }
+      releaseDesktopGeneration(createdTaskId ?? undefined)
+      const detail = cause instanceof Error ? cause.message : '暂时无法启动生成任务'
+      setError(detail.includes('GENERATION_ALREADY_ACTIVE')
+        ? '当前有图片正在生成，请完成或取消后再试。'
+        : detail)
     } finally {
-      setPending(false)
+      startingRef.current = false
     }
+  }, [acquireDesktopGeneration, bindDesktopTask, bridge, mentionImages, projectId, releaseDesktopGeneration, transparentBackground])
+
+  useEffect(() => {
+    if (!projectId || !quickAction || quickAction.projectId !== projectId) return
+    const action = consumeQuickAction(projectId)
+    if (!action) return
+    void startGeneration(action.prompt, action.referenceImages, action.transparentBackground)
+  }, [consumeQuickAction, projectId, quickAction, startGeneration])
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    void startGeneration(prompt)
   }
 
   const hideView = () => {
@@ -240,6 +290,16 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
           )}
         </div>
         <p className="desktop-mention-help">输入 @ 后选择图片，可在同一 Prompt 中引用多张。</p>
+        <button
+          className="desktop-transparent-option"
+          type="button"
+          aria-label="透明背景"
+          aria-pressed={transparentBackground}
+          onClick={() => setTransparentBackground(!transparentBackground)}
+        >
+          <Eraser size={14} />
+          <span><strong>透明背景</strong><small>直接生成无背景图片</small></span>
+        </button>
         {resolvedReferences.length > 0 && (
           <div className="desktop-mention-summary" aria-label={`将引用 ${resolvedReferences.length} 张图片`}>
             <span>将引用 {resolvedReferences.length} 张图片</span>

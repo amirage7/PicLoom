@@ -14,6 +14,7 @@ describe('generation backend client', () => {
       taskId: 'task one',
       batchId: 'batch-1',
       sourceUrl: 'https://chatgpt.com/c/test',
+      suggestedNames: ['云端机甲', '苍穹机甲'],
       images: [
         { order: 1, sourceUrl: 'blob:2', mimeType: 'image/webp', sha256: 'b', bytes: Uint8Array.of(2) },
         { order: 0, sourceUrl: 'blob:1', mimeType: 'image/png', sha256: 'a', bytes: Uint8Array.of(1) },
@@ -25,7 +26,24 @@ describe('generation backend client', () => {
     expect(multipart.getAll('files').map((file) => (file as File).name)).toEqual([
       'chatgpt-1.png', 'chatgpt-2.webp',
     ])
+    expect(multipart.get('suggested_names')).toBe(JSON.stringify(['云端机甲', '苍穹机甲']))
     expect(result.imageIds).toEqual(['one', 'two'])
+  })
+
+  it('omits an empty suggested name list from the multipart request', async () => {
+    const request = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => (
+      new Response(JSON.stringify({ image_ids: ['one'] }))
+    ))
+    const client = new GenerationBackendClient('http://127.0.0.1:8001', request)
+
+    await client.completeBatch({
+      taskId: 'task-1', batchId: 'batch-1', sourceUrl: 'https://chatgpt.com/c/test',
+      suggestedNames: ['', '   '],
+      images: [{ order: 0, sourceUrl: 'blob:1', mimeType: 'image/png', sha256: 'a', bytes: Uint8Array.of(1) }],
+    })
+
+    const multipart = request.mock.calls[0]?.[1]?.body as FormData
+    expect(multipart.has('suggested_names')).toBe(false)
   })
 
   it('surfaces backend detail without exposing request bodies', async () => {

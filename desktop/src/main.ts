@@ -9,6 +9,7 @@ import { BackendSupervisor } from './backendSupervisor.js'
 import { ChatGptViewController } from './chatgptView.js'
 import { inspectChatGptPage } from './chatgpt/adapter.js'
 import { collectChatGptImages } from './chatgpt/download.js'
+import { requestChatGptImageNames } from './chatgpt/imageNaming.js'
 import { submitPrompt } from './chatgpt/promptSubmission.js'
 import { attachReferenceFiles } from './chatgpt/referenceAttachment.js'
 import { GenerationBackendClient } from './generationBackendClient.js'
@@ -139,6 +140,8 @@ async function createApplicationWindow(): Promise<void> {
         signal,
       },
     ),
+    requestSuggestedName: (webContents, count, signal) =>
+      requestChatGptImageNames(webContents, count, signal),
     backend: generationBackend,
     emit: (event) => mainWindow?.webContents.send('desktop:generation-event', event),
   })

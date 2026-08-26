@@ -13,6 +13,7 @@ describe('desktop IPC contracts', () => {
       prompt: '一朵白色山茶花',
       parentImageId: null,
       referenceImages: [],
+      transparentBackground: false,
     }
     const event: DesktopGenerationEvent = {
       taskId: 'task-1',

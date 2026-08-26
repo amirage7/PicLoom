@@ -20,6 +20,7 @@ const node: CanvasNode = {
       name: '滨海未来城市',
       prompt: 'A calm coastal city with precise civic architecture',
       tags: ['建筑'],
+      sourceIds: [],
       parentId: null,
       createdTime: '2026-08-21T09:30:00+08:00',
     },

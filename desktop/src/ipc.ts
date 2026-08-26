@@ -107,21 +107,23 @@ export function validateGenerationRequest(value: unknown): DesktopGenerationRequ
   if (typeof value !== 'object' || value === null) throw new Error('INVALID_GENERATION_REQUEST')
   const input = value as Record<string, unknown>
   const taskId = nonEmptyString(input.taskId, 10_000)
-  const projectId = nonEmptyString(input.projectId, 10_000)
+  const projectId = input.projectId === null ? null : nonEmptyString(input.projectId, 10_000)
   const prompt = nonEmptyString(input.prompt, 20_000)
   const parentImageId = input.parentImageId === null
     ? null
     : nonEmptyString(input.parentImageId, 10_000)
   const referenceImages = validatedReferences(input.referenceImages)
+  const transparentBackground = input.transparentBackground
   const expectedParentId = referenceImages?.[0]?.imageId ?? null
   if (
-    !taskId || !projectId || !prompt || referenceImages === null ||
+    !taskId || (projectId === null ? input.projectId !== null : !projectId) || !prompt || referenceImages === null ||
+    typeof transparentBackground !== 'boolean' ||
     (parentImageId === null && input.parentImageId !== null) ||
     parentImageId !== expectedParentId
   ) {
     throw new Error('INVALID_GENERATION_REQUEST')
   }
-  return { taskId, projectId, prompt, parentImageId, referenceImages }
+  return { taskId, projectId, prompt, parentImageId, referenceImages, transparentBackground }
 }
 
 export function validateSaveImageRequest(value: unknown): { imageId: string; fileName: string } {

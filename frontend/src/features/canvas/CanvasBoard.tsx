@@ -32,10 +32,12 @@ import { useAppStore } from '../../app/store'
 import { IconButton } from '../../components/IconButton'
 import type { BackendStatus } from '../../lib/useBackendHealth'
 import { GenerationPanel } from '../generation/GenerationPanel'
+import { GalleryView } from '../gallery/GalleryView'
 import { useGenerationStore } from '../generation/generationStore'
 import { ImageNode } from './components/ImageNode'
 import { useCanvasStore } from './store/canvasStore'
 import { useCanvasShortcuts } from './useCanvasShortcuts'
+import { useCanvasDeletionShortcut } from './useCanvasDeletionShortcut'
 
 interface CanvasBoardProps {
   backendStatus: BackendStatus
@@ -51,7 +53,7 @@ const statusText: Record<BackendStatus, string> = {
   checking: '正在连接', online: '本地服务在线', offline: '后端离线',
 }
 
-function Board({
+export function Board({
   projectId,
   shortcutsEnabled,
   isRightPanelOpen,
@@ -71,12 +73,14 @@ function Board({
   const applyNodeChanges = useCanvasStore((state) => state.applyNodeChanges)
   const applyEdgeChanges = useCanvasStore((state) => state.applyEdgeChanges)
   const selectNode = useCanvasStore((state) => state.selectNode)
+  const selectEdge = useCanvasStore((state) => state.selectEdge)
   const selectImportedBatch = useCanvasStore((state) => state.selectImportedBatch)
   const deleteNode = useCanvasStore((state) => state.deleteNode)
   const loadCanvas = useCanvasStore((state) => state.loadCanvas)
   const uploadPersistedImages = useCanvasStore((state) => state.uploadPersistedImages)
   const persistPosition = useCanvasStore((state) => state.persistPosition)
   const persistConnection = useCanvasStore((state) => state.persistConnection)
+  const persistEdgeDeletion = useCanvasStore((state) => state.persistEdgeDeletion)
   const deletePersistedNode = useCanvasStore((state) => state.deletePersistedNode)
   const isGenerationPanelOpen = useGenerationStore((state) => state.isPanelOpen)
   const setGenerationPanelOpen = useGenerationStore((state) => state.setPanelOpen)
@@ -114,23 +118,23 @@ function Board({
     })
   }, [fitView, loadCanvas, projectId, selectImportedBatch])
 
-  useEffect(() => {
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (target?.matches('input, textarea, [contenteditable="true"]')) return
-      if ((event.key === 'Delete' || event.key === 'Backspace') && canvas.selectedNodeId) {
-        event.preventDefault()
-        const selectedNode = canvas.nodes.find((node) => node.id === canvas.selectedNodeId)
-        if (selectedNode?.data.image.imageSource === 'stored') {
-          void deletePersistedNode(projectId, canvas.selectedNodeId).catch(() => undefined)
-        } else {
-          deleteNode(projectId, canvas.selectedNodeId)
-        }
+  useCanvasDeletionShortcut({
+    enabled: shortcutsEnabled,
+    onDelete: () => {
+      const selectedEdge = canvas.edges.find((edge) => edge.selected)
+      if (selectedEdge) {
+        void persistEdgeDeletion(projectId, selectedEdge.source, selectedEdge.target).catch(() => undefined)
+        return
       }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [canvas.nodes, canvas.selectedNodeId, deleteNode, deletePersistedNode, projectId])
+      if (!canvas.selectedNodeId) return
+      const selectedNode = canvas.nodes.find((node) => node.id === canvas.selectedNodeId)
+      if (selectedNode?.data.image.imageSource === 'stored') {
+        void deletePersistedNode(projectId, canvas.selectedNodeId).catch(() => undefined)
+      } else {
+        deleteNode(projectId, canvas.selectedNodeId)
+      }
+    },
+  })
 
   const addFiles = async (files: FileList | null, clientX?: number, clientY?: number) => {
     if (!files?.length) return
@@ -168,6 +172,7 @@ function Board({
         }}
         onNodeDragStop={(_, node) => void persistPosition(projectId, node.id, node.position)}
         onNodeClick={(_, node) => selectNode(projectId, node.id)}
+        onEdgeClick={(_, edge) => selectEdge(projectId, edge.id)}
         onPaneClick={() => selectNode(projectId, null)}
         nodesDraggable={activeTool === 'select'}
         elementsSelectable={activeTool === 'select'}
@@ -195,7 +200,7 @@ function Board({
         }}>
           <Sparkles size={16} />
         </IconButton>
-        <IconButton label="连接图片：拖动节点两侧圆点" onClick={() => setTool('select')}><Link2 size={16} /></IconButton>
+        <IconButton label="连接图片：拖动节点圆点；选中连线后按 Delete 删除" onClick={() => setTool('select')}><Link2 size={16} /></IconButton>
         <input ref={inputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={onInput} />
       </div>
 
@@ -229,6 +234,9 @@ function Board({
 export function CanvasBoard({ backendStatus, isLeftPanelOpen, isRightPanelOpen, onToggleLeft, onToggleRight, shortcutsEnabled }: CanvasBoardProps) {
   const projects = useAppStore((state) => state.projects)
   const activeProjectId = useAppStore((state) => state.activeProjectId)
+  const workspaceMode = useAppStore((state) => state.workspaceMode)
+  const projectView = useAppStore((state) => state.projectView)
+  const setProjectView = useAppStore((state) => state.setProjectView)
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0]
   const hydrateResources = useAppStore((state) => state.hydrateResources)
   const loadCanvas = useCanvasStore((state) => state.loadCanvas)
@@ -238,25 +246,21 @@ export function CanvasBoard({ backendStatus, isLeftPanelOpen, isRightPanelOpen, 
       <header className="canvas-header">
         <div className="canvas-title-group">
           <IconButton label="切换左侧栏" aria-controls="workspace-navigation" aria-expanded={isLeftPanelOpen} onClick={(event) => onToggleLeft(event.currentTarget)}><PanelLeftClose size={16} /></IconButton>
-          <span className="breadcrumb">项目</span><span className="breadcrumb-separator">/</span>
-          <h1>{activeProject.name}</h1><ChevronDown size={14} aria-hidden="true" />
+          <span className="breadcrumb">{workspaceMode === 'quick' ? '工作区' : '项目'}</span><span className="breadcrumb-separator">/</span>
+          <h1>{workspaceMode === 'quick' ? '快速创作' : activeProject.name}</h1>{workspaceMode === 'project' && <ChevronDown size={14} aria-hidden="true" />}
+          {workspaceMode === 'project' && <div className="workspace-view-tabs" role="tablist" aria-label="项目视图"><button type="button" role="tab" aria-selected={projectView === 'canvas'} onClick={() => setProjectView('canvas')}>画布</button><button type="button" role="tab" aria-selected={projectView === 'gallery'} onClick={() => setProjectView('gallery')}>图库</button></div>}
         </div>
         <div className="canvas-actions">
           <div className={`backend-status backend-status--${backendStatus}`} role="status"><span className="status-mark" />{statusText[backendStatus]}</div>
-          <SaveStatus onRetry={() => void hydrateResources().then(() => loadCanvas(activeProject.id)).catch(() => undefined)} />
+          <SaveStatus onRetry={() => void hydrateResources().then(() => workspaceMode === 'project' ? loadCanvas(activeProject.id) : undefined).catch(() => undefined)} />
           <IconButton label="搜索将在后续阶段开放" disabled><Search size={16} /></IconButton>
           <IconButton label="帮助：拖动空白区域平移，滚轮缩放"><CircleHelp size={16} /></IconButton>
           <IconButton label="切换详情栏" aria-controls="image-inspector" aria-expanded={isRightPanelOpen} onClick={(event) => onToggleRight(event.currentTarget)}><PanelRightClose size={16} /></IconButton>
         </div>
       </header>
-      <ReactFlowProvider key={activeProjectId}>
-        <Board
-          projectId={activeProjectId}
-          shortcutsEnabled={shortcutsEnabled}
-          isRightPanelOpen={isRightPanelOpen}
-          onToggleRight={onToggleRight}
-        />
-      </ReactFlowProvider>
+      {workspaceMode === 'quick' ? <GalleryView projectId={null} /> : projectView === 'gallery' ? <GalleryView projectId={activeProjectId} /> : <ReactFlowProvider key={activeProjectId}>
+        <Board projectId={activeProjectId} shortcutsEnabled={shortcutsEnabled} isRightPanelOpen={isRightPanelOpen} onToggleRight={onToggleRight} />
+      </ReactFlowProvider>}
     </main>
   )
 }

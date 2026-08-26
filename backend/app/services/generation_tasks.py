@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -10,6 +11,7 @@ from app.services.image_names import allocate_image_name, preferred_image_name
 from app.services.image_storage import store_image
 from app.models.generation import GenerationTask
 from app.services.resources import ResourceNotFoundError
+from app.services import image_relations
 
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
@@ -51,20 +53,30 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def create_task(session: Session, project_id: str, prompt: str, parent_image_id: str | None) -> GenerationTask:
+def create_task(
+    session: Session,
+    project_id: str | None,
+    prompt: str,
+    parent_image_id: str | None,
+    reference_image_ids: list[str] | None = None,
+) -> GenerationTask:
     normalized_prompt = prompt.strip()
     if not normalized_prompt:
         raise ValueError("Prompt 不能为空")
-    if session.get(Project, project_id) is None:
+    if project_id is not None and session.get(Project, project_id) is None:
         raise ResourceNotFoundError("项目不存在")
-    if parent_image_id is not None:
-        parent = session.get(Image, parent_image_id)
-        if parent is None or parent.project_id != project_id:
-            raise ValueError("父图片必须属于当前项目")
+    requested = reference_image_ids or ([parent_image_id] if parent_image_id else [])
+    normalized_references = list(dict.fromkeys(requested))
+    for reference_id in normalized_references:
+        reference = session.get(Image, reference_id)
+        if reference is None or reference.project_id != project_id:
+            raise ValueError("参考图片必须属于当前项目")
+    legacy_parent_id = normalized_references[0] if normalized_references else None
     now = _now()
     task = GenerationTask(
         id=str(uuid4()), project_id=project_id, provider="chatgpt-web",
-        prompt=normalized_prompt, parent_image_id=parent_image_id,
+        prompt=normalized_prompt, parent_image_id=legacy_parent_id,
+        reference_image_ids_json=json.dumps(normalized_references),
         status="queued", progress_message="等待扩展连接",
         created_time=now, updated_time=now,
     )
@@ -104,7 +116,7 @@ def update_desktop_state(
     last_page_url: str | None = None,
 ) -> GenerationTask:
     task = get_task(session, task_id)
-    if state not in DESKTOP_TRANSITIONS.get(task.status, set()):
+    if state != task.status and state not in DESKTOP_TRANSITIONS.get(task.status, set()):
         raise InvalidTaskTransition(f"无法从 {task.status} 切换到 {state}")
     task.provider_mode = "desktop"
     task.status = state
@@ -164,10 +176,19 @@ def complete_with_image(
         parent_id=task.parent_image_id,
         position_x=0,
         position_y=0,
+        is_on_canvas=task.project_id is not None,
+        is_favorite=False,
+        source_type="generated",
         created_time=_now(),
     )
     try:
         session.add(image)
+        session.flush()
+        for reference_id in task.reference_image_ids:
+            if reference_id != image.id:
+                image_relations.create_relation(
+                    session, reference_id, image.id, commit=False
+                )
         task.status = "completed"
         task.progress_message = "图片已保存"
         task.chat_url = chat_url[:1024]

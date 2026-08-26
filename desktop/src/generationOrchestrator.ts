@@ -12,6 +12,8 @@ import type {
 
 const GENERATION_TIMEOUT_MS = 8 * 60 * 1_000
 const INITIAL_COMPOSER_ATTEMPTS = 20
+const TRANSPARENT_BACKGROUND_INSTRUCTION = '将最终图片背景设为透明，保持所有前景主体完整无损，边缘干净平滑。不要添加纯色、白色或棋盘格背景。'
+const IMAGE_NAMING_INSTRUCTION = '请为最终图片拟定一个 2–12 个字符的简短中文名称，并在回复中严格使用“图片名称：名称”的格式。'
 
 interface AutomationWebContents {
   executeJavaScript(script: string): Promise<unknown>
@@ -26,10 +28,11 @@ interface OrchestratorView {
 
 interface BatchCompletionInput {
   taskId: string
-  projectId: string
+  projectId: string | null
   batchId: string
   sourceUrl: string
   images: CollectedImage[]
+  suggestedNames?: string[]
 }
 
 interface OrchestratorBackend {
@@ -44,6 +47,11 @@ interface GenerationOrchestratorOptions {
   submit(webContents: AutomationWebContents, prompt: string): Promise<SubmissionReceipt>
   collect(sources: ImageSource[], webContents: AutomationWebContents, signal: AbortSignal): Promise<CollectedImage[]>
   attachReferences?(webContents: AutomationWebContents, imageIds: string[]): Promise<() => Promise<void>>
+  requestSuggestedName?(
+    webContents: AutomationWebContents,
+    imageCount: number,
+    signal: AbortSignal,
+  ): Promise<string[] | undefined>
   backend: OrchestratorBackend
   emit(event: DesktopGenerationEvent): void
   createBatchId?: () => string
@@ -69,9 +77,9 @@ const messages: Record<DesktopGenerationState, string> = {
   ready: 'ChatGPT 已就绪',
   sending: '正在发送 Prompt',
   generating: 'ChatGPT 正在生成图片，可以隐藏页面继续等待。',
-  collecting: '正在收集本次回复中的全部图片。',
-  importing: '正在把图片保存到当前项目',
-  completed: '图片已导入画布',
+  collecting: '正在收集最后生成的图片。',
+  importing: '正在把最终图片保存到当前项目',
+  completed: '最终图片已导入画布',
   refused: 'ChatGPT 未执行这次图片请求。',
   rate_limited: 'ChatGPT 当前额度或频率受限，请稍后在原对话中重试。',
   page_changed: 'ChatGPT 页面结构已变化，请打开页面检查后重试收集。',
@@ -104,6 +112,17 @@ export function buildReferencePrompt(prompt: string, references: DesktopReferenc
     .join('；')
   return `参考图片顺序：${order}。\n` +
     `请严格按照用户文本中的 @名称 对应这些附件。\n\n${prompt}`
+}
+
+export function buildSubmissionPrompt(
+  prompt: string,
+  references: DesktopReferenceImage[],
+  transparentBackground: boolean,
+): string {
+  const parts = [buildReferencePrompt(prompt, references)]
+  if (transparentBackground) parts.push(TRANSPARENT_BACKGROUND_INSTRUCTION)
+  parts.push(IMAGE_NAMING_INSTRUCTION)
+  return parts.join('\n\n')
 }
 
 export class GenerationOrchestrator {
@@ -216,7 +235,12 @@ export class GenerationOrchestrator {
         )
       }
       task.receipt = await this.options.submit(
-        webContents, buildReferencePrompt(request.prompt, request.referenceImages)
+        webContents,
+        buildSubmissionPrompt(
+          request.prompt,
+          request.referenceImages,
+          request.transparentBackground,
+        ),
       )
       await this.transition(task, 'generating')
       await this.observeUntilComplete(task)
@@ -247,7 +271,7 @@ export class GenerationOrchestrator {
         continue
       }
       if (pageState.kind === 'completed') {
-        await this.collectAndImport(task, pageState.images)
+        await this.collectAndImport(task, pageState.images, pageState.suggestedName)
         return
       }
       await this.finishPageState(task, pageState)
@@ -275,26 +299,75 @@ export class GenerationOrchestrator {
   private async collectAndImport(
     task: RecoverableTask,
     sources: Array<{ src: string; alt: string }>,
+    suggestedName?: string,
     signal = this.active?.controller.signal ?? new AbortController().signal,
   ): Promise<void> {
     await this.transition(task, 'collecting')
-    const orderedSources = sources.map((image, order) => ({ src: image.src, order }))
-    const images = await this.options.collect(orderedSources, this.options.view.getWebContents(), signal)
-    if (images.length === 0) throw new Error('ChatGPT response contained no supported images')
-    await this.transition(task, 'importing')
+    if (sources.length === 0) throw new Error('ChatGPT response contained no supported images')
+    const sourcesWithOrder = sources.map((source, index) => ({ src: source.src, order: index }))
+    const collectedImages = await this.options.collect(
+      sourcesWithOrder,
+      this.options.view.getWebContents(),
+      signal,
+    )
     try {
+      if (collectedImages.length === 0) throw new Error('ChatGPT response contained no supported images')
+      collectedImages.sort((left, right) => left.order - right.order)
+
+      let suggestedNames: string[] = []
+      if (collectedImages.length === 1) {
+        let resolvedName = suggestedName
+        if (!resolvedName && this.options.requestSuggestedName) {
+          await this.transition(task, 'collecting', {
+            message: '图片已生成，正在请 ChatGPT 命名。',
+          })
+          try {
+            const names = await this.options.requestSuggestedName(
+              this.options.view.getWebContents(),
+              1,
+              signal,
+            )
+            resolvedName = names?.[0]
+          } catch (error) {
+            if (signal.aborted) throw error
+            resolvedName = undefined
+          }
+        }
+        if (resolvedName) suggestedNames = [resolvedName]
+      } else {
+        if (this.options.requestSuggestedName) {
+          await this.transition(task, 'collecting', {
+            message: `已生成 ${collectedImages.length} 张图片，正在请 ChatGPT 分别命名。`,
+          })
+          try {
+            const names = await this.options.requestSuggestedName(
+              this.options.view.getWebContents(),
+              collectedImages.length,
+              signal,
+            )
+            suggestedNames = (names ?? []).slice(0, collectedImages.length)
+          } catch (error) {
+            if (signal.aborted) throw error
+            suggestedNames = []
+          }
+        }
+        while (suggestedNames.length < collectedImages.length) suggestedNames.push('')
+      }
+
+      await this.transition(task, 'importing')
       const result = await this.options.backend.completeBatch({
         taskId: task.request.taskId,
         projectId: task.request.projectId,
         batchId: task.batchId,
         sourceUrl: this.options.view.getUrl(),
-        images,
+        images: collectedImages,
+        ...(suggestedNames.some((name) => name.trim()) ? { suggestedNames } : {}),
       })
       task.state = 'completed'
       this.emit(task.request.taskId, 'completed', { imageIds: result.imageIds })
       this.recoverable = null
     } finally {
-      for (const image of images) image.bytes.fill(0)
+      for (const image of collectedImages) image.bytes.fill(0)
     }
   }
 
@@ -337,7 +410,7 @@ export class GenerationOrchestrator {
         await this.finishPageState(task, state)
         return
       }
-      await this.collectAndImport(task, state.images, controller.signal)
+      await this.collectAndImport(task, state.images, state.suggestedName, controller.signal)
     } catch (error) {
       if (!controller.signal.aborted) await this.failRecoverably(task, error)
     } finally {

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { DesktopGenerationEvent, DesktopGenerationRequest } from '../src/contracts.js'
 import type { PageState } from '../src/chatgpt/adapter.js'
 import type { CollectedImage } from '../src/chatgpt/download.js'
-import { GenerationOrchestrator } from '../src/generationOrchestrator.js'
+import { buildSubmissionPrompt, GenerationOrchestrator } from '../src/generationOrchestrator.js'
 
 const REQUEST: DesktopGenerationRequest = {
   taskId: 'task-1',
@@ -11,11 +11,47 @@ const REQUEST: DesktopGenerationRequest = {
   prompt: '一朵花',
   parentImageId: null,
   referenceImages: [],
+  transparentBackground: false,
 }
+
+describe('ChatGPT submission prompt', () => {
+  it('always requests a fixed-format name without changing the user prompt', () => {
+    const result = buildSubmissionPrompt('生成一个机器人', [], false)
+
+    expect(result).toContain('生成一个机器人')
+    expect(result).toContain('2–12 个字符的简短中文名称')
+    expect(result).toContain('图片名称：名称')
+    expect(result).not.toContain('背景设为透明')
+  })
+
+  it('adds transparent-output constraints only when requested', () => {
+    expect(buildSubmissionPrompt('生成一个机器人', [], true)).toContain(
+      '将最终图片背景设为透明，保持所有前景主体完整无损，边缘干净平滑。不要添加纯色、白色或棋盘格背景。',
+    )
+    expect(buildSubmissionPrompt('生成一个机器人', [], false)).not.toContain('背景设为透明')
+  })
+
+  it('keeps ordered reference mapping alongside generation constraints', () => {
+    const result = buildSubmissionPrompt('组合@甲和@乙', [
+      { imageId: 'a', name: '甲' },
+      { imageId: 'b', name: '乙' },
+    ], true)
+
+    expect(result).toContain('参考图片顺序：第1张“甲”；第2张“乙”。')
+    expect(result).toContain('请严格按照用户文本中的 @名称 对应这些附件。')
+    expect(result).toContain('组合@甲和@乙')
+    expect(result).toContain('背景设为透明')
+  })
+})
 
 function harness(states: PageState[]) {
   const events: DesktopGenerationEvent[] = []
-  const updateState = vi.fn(async () => undefined)
+  const updateState = vi.fn(async (
+    _taskId: string,
+    _state: DesktopGenerationEvent['state'],
+    _message: string,
+    _pageUrl: string,
+  ) => undefined)
   const completeBatch = vi.fn(async () => ({ imageIds: ['image-1', 'image-2'] }))
   const inspect = vi.fn(async (): Promise<PageState> => states.shift() ?? { kind: 'generating' })
   const submit = vi.fn(async () => ({
@@ -24,15 +60,22 @@ function harness(states: PageState[]) {
     imageSourcesBefore: ['https://chatgpt.com/existing.webp'],
     submittedAt: 1,
   }))
-  const collect = vi.fn(async (): Promise<CollectedImage[]> => [
-    { order: 0, sourceUrl: 'blob:first', mimeType: 'image/png', sha256: 'a', bytes: Uint8Array.of(1) },
-    { order: 1, sourceUrl: 'blob:second', mimeType: 'image/webp', sha256: 'b', bytes: Uint8Array.of(2) },
-  ])
+  const collect = vi.fn(async (sources: Array<{ src: string; order: number }>): Promise<CollectedImage[]> => (
+    sources.map((source) => ({
+      order: source.order,
+      sourceUrl: source.src,
+      mimeType: 'image/png',
+      sha256: `sha-${source.order}`,
+      bytes: Uint8Array.of(source.order + 1),
+    }))
+  ))
   const abortableWait = vi.fn(async (_ms: number, signal: AbortSignal) => {
     if (signal.aborted) throw signal.reason
   })
   const cleanupReferences = vi.fn(async () => undefined)
   const attachReferences = vi.fn(async () => cleanupReferences)
+  const requestSuggestedName = vi.fn(async (_webContents: unknown, count: number) =>
+    Array.from({ length: Math.max(1, count) }, (_, index) => `名${index + 1}`))
   const orchestrator = new GenerationOrchestrator({
     view: {
       loadHome: vi.fn(async () => undefined),
@@ -43,36 +86,122 @@ function harness(states: PageState[]) {
     submit,
     collect,
     attachReferences,
+    requestSuggestedName,
     backend: { updateState, cancel: vi.fn(async () => undefined), completeBatch },
     createBatchId: () => 'batch-1',
     now: vi.fn(() => 1_000),
     wait: abortableWait,
     emit: (event) => events.push(event),
   })
-  return { orchestrator, events, updateState, completeBatch, inspect, submit, collect, attachReferences, cleanupReferences }
+  return {
+    orchestrator,
+    events,
+    updateState,
+    completeBatch,
+    inspect,
+    submit,
+    collect,
+    attachReferences,
+    cleanupReferences,
+    requestSuggestedName,
+  }
 }
 
 describe('desktop generation orchestrator', () => {
-  it('runs the full successful state path and imports every returned image', async () => {
+  it('imports every generated image candidate, not just the last one', async () => {
     const test = harness([
       { kind: 'ready' },
       { kind: 'generating' },
       { kind: 'completed', images: [
         { src: 'blob:first', alt: 'Generated image 1' },
         { src: 'blob:second', alt: 'Generated image 2' },
-      ] },
+      ], suggestedName: '云端机甲' },
     ])
 
     await test.orchestrator.start(REQUEST)
 
     expect(test.events.map((event) => event.state)).toEqual([
       'queued', 'opening_chatgpt', 'ready', 'sending', 'generating',
-      'collecting', 'importing', 'completed',
+      'collecting', 'collecting', 'importing', 'completed',
     ])
-    expect(test.events.at(-1)?.imageIds).toEqual(['image-1', 'image-2'])
+    expect(test.collect).toHaveBeenCalledWith(
+      [{ src: 'blob:first', order: 0 }, { src: 'blob:second', order: 1 }],
+      expect.anything(),
+      expect.any(AbortSignal),
+    )
     expect(test.completeBatch).toHaveBeenCalledWith(expect.objectContaining({
       taskId: 'task-1', batchId: 'batch-1', projectId: 'project-1',
+      images: expect.arrayContaining([
+        expect.objectContaining({ sourceUrl: 'blob:first' }),
+        expect.objectContaining({ sourceUrl: 'blob:second' }),
+      ]),
+      suggestedNames: ['名1', '名2'],
     }))
+    expect(test.requestSuggestedName).toHaveBeenCalledWith(
+      expect.anything(),
+      2,
+      expect.any(AbortSignal),
+    )
+    expect(test.events.find((event) => event.state === 'collecting')?.message)
+      .toBe('正在收集最后生成的图片。')
+  })
+
+  it('asks ChatGPT once for a single name when the image reply has no name', async () => {
+    const test = harness([{ kind: 'ready' }, {
+      kind: 'completed', images: [{ src: 'blob:first', alt: '' }],
+    }])
+
+    await test.orchestrator.start(REQUEST)
+
+    expect(test.requestSuggestedName).toHaveBeenCalledOnce()
+    expect(test.requestSuggestedName).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      expect.any(AbortSignal),
+    )
+    expect(test.completeBatch).toHaveBeenCalledWith(expect.objectContaining({
+      suggestedNames: ['名1'],
+    }))
+    expect(test.events.find((event) => event.message === '图片已生成，正在请 ChatGPT 命名。'))
+      .toBeDefined()
+  })
+
+  it('imports the image when the follow-up naming request fails', async () => {
+    const test = harness([{ kind: 'ready' }, {
+      kind: 'completed', images: [{ src: 'blob:first', alt: '' }],
+    }])
+    test.requestSuggestedName.mockRejectedValueOnce(new Error('naming unavailable'))
+
+    await test.orchestrator.start(REQUEST)
+
+    expect(test.requestSuggestedName).toHaveBeenCalledOnce()
+    expect(test.completeBatch).toHaveBeenCalledWith(expect.not.objectContaining({
+      suggestedNames: expect.anything(),
+    }))
+    expect(test.events.at(-1)?.state).toBe('completed')
+  })
+
+  it('asks ChatGPT for distinct names when several images are generated', async () => {
+    const test = harness([{ kind: 'ready' }, {
+      kind: 'completed', images: [
+        { src: 'blob:first', alt: 'Generated image 1' },
+        { src: 'blob:second', alt: 'Generated image 2' },
+      ],
+    }])
+    test.requestSuggestedName.mockImplementationOnce(async (_webContents, count) =>
+      Array.from({ length: count }, (_, index) => `logo-${index + 1}`))
+
+    await test.orchestrator.start(REQUEST)
+
+    expect(test.requestSuggestedName).toHaveBeenCalledWith(expect.anything(), 2, expect.any(AbortSignal))
+    expect(test.completeBatch).toHaveBeenCalledWith(expect.objectContaining({
+      images: expect.arrayContaining([
+        expect.objectContaining({ sourceUrl: 'blob:first' }),
+        expect.objectContaining({ sourceUrl: 'blob:second' }),
+      ]),
+      suggestedNames: ['logo-1', 'logo-2'],
+    }))
+    expect(test.events.at(-1)?.state).toBe('completed')
   })
 
   it('pauses for login and resumes without creating a second task', async () => {
@@ -151,6 +280,30 @@ describe('desktop generation orchestrator', () => {
     expect(test.events.at(-1)).toMatchObject({ state: 'failed', recoverable: true })
   })
 
+  it('clears collected image bytes when the importing transition fails', async () => {
+    const bytes = Uint8Array.of(7, 8, 9)
+    const test = harness([{ kind: 'ready' }, {
+      kind: 'completed', images: [{ src: 'blob:first', alt: '' }],
+    }])
+    test.collect.mockResolvedValueOnce([
+      { order: 0, sourceUrl: 'blob:first', mimeType: 'image/png', sha256: 'a', bytes },
+    ])
+    test.updateState.mockImplementation(async (
+      _taskId: string,
+      state: DesktopGenerationEvent['state'],
+      _message: string,
+      _pageUrl: string,
+    ) => {
+      if (state === 'importing') throw new Error('importing transition failed')
+    })
+
+    await test.orchestrator.start(REQUEST)
+
+    expect(bytes).toEqual(Uint8Array.of(0, 0, 0))
+    expect(test.completeBatch).not.toHaveBeenCalled()
+    expect(test.events.at(-1)).toMatchObject({ state: 'failed', recoverable: true })
+  })
+
   it('attaches named references in order before submitting a mapped prompt', async () => {
     const test = harness([{ kind: 'ready' }, {
       kind: 'completed', images: [{ src: 'blob:first', alt: '' }],
@@ -164,15 +317,15 @@ describe('desktop generation orchestrator', () => {
         { imageId: 'build', name: '假面骑士build' },
         { imageId: 'sheep', name: '喜羊羊' },
       ],
+      transparentBackground: true,
     })
 
     expect(test.attachReferences).toHaveBeenCalledWith(expect.anything(), ['build', 'sheep'])
     expect(test.attachReferences.mock.invocationCallOrder[0]!).toBeLessThan(test.submit.mock.invocationCallOrder[0]!)
-    expect(test.submit).toHaveBeenCalledWith(
-      expect.anything(),
-      '参考图片顺序：第1张“假面骑士build”；第2张“喜羊羊”。\n' +
-      '请严格按照用户文本中的 @名称 对应这些附件。\n\n' + prompt,
-    )
+    expect(test.submit).toHaveBeenCalledWith(expect.anything(), buildSubmissionPrompt(prompt, [
+      { imageId: 'build', name: '假面骑士build' },
+      { imageId: 'sheep', name: '喜羊羊' },
+    ], true))
     expect(test.cleanupReferences).toHaveBeenCalledOnce()
   })
 
