@@ -166,6 +166,27 @@ describe('ChatGptGenerationPanel', () => {
     expect(screen.getByText('结果将保存到：角色创作')).toBeInTheDocument()
   })
 
+  it('uses the newly active workspace after an idle panel rerender', async () => {
+    const user = userEvent.setup()
+    const bridge = installBridge()
+    useAppStore.setState({
+      projects: [
+        { id: 'a', name: '角色创作', createdTime: '', imageCount: 0 },
+        { id: 'b', name: '项目 logo', createdTime: '', imageCount: 0 },
+      ],
+      activeProjectId: 'a', workspaceMode: 'project',
+    })
+    const { rerender } = render(<ChatGptGenerationPanel projectId="a" />)
+
+    rerender(<ChatGptGenerationPanel projectId="b" />)
+    expect(screen.getByRole('combobox', { name: '保存到项目' })).toHaveValue('b')
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), '一朵花')
+    await user.click(screen.getByRole('button', { name: '使用 ChatGPT 生成' }))
+
+    await waitFor(() => expect(api.createGenerationTask).toHaveBeenCalledWith('b', '一朵花', undefined))
+    expect(bridge.startGeneration).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'b' }))
+  })
+
   it('ignores stale image scopes after changing the destination', async () => {
     const user = userEvent.setup()
     installBridge()

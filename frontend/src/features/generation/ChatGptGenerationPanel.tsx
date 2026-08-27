@@ -72,6 +72,10 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
   const terminalFeedback = generationEvent ? terminalPresentation(generationEvent) : null
 
   useEffect(() => {
+    if (!taskDestinationLocked) setSelectedProjectId(projectId)
+  }, [projectId, taskDestinationLocked])
+
+  useEffect(() => {
     const requestId = ++scopeRequestRef.current
     setScopeImages([])
     const request = taskProjectId ? resourcesApi.listImages(taskProjectId) : resourcesApi.listUnarchivedImages()
