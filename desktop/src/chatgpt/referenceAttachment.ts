@@ -86,6 +86,13 @@ export async function attachReferenceFiles(
       nodeId,
       files: filePaths,
     })
+    await webContents.executeJavaScript(`(() => {
+      const input = document.querySelector('[data-aic-reference-target="true"]')
+      if (!input?.files || input.files.length < ${filePaths.length}) return false
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+      return true
+    })()`)
     await waitForReferenceAttachment(async () => {
       const ready = await webContents.executeJavaScript(`(() => {
         const hasVisibleAttachmentSignal = ${hasVisibleAttachmentSignal.toString()}

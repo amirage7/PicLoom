@@ -51,6 +51,22 @@ describe('ChatGPT reference attachment', () => {
     expect(webContents.debugger.detach).toHaveBeenCalledOnce()
   })
 
+  it('notifies ChatGPT after Chromium selects the reference file', async () => {
+    const sendCommand = vi.fn()
+      .mockResolvedValueOnce({ root: { nodeId: 1 } })
+      .mockResolvedValueOnce({ nodeId: 9 })
+      .mockResolvedValueOnce({})
+    const executeJavaScript = vi.fn<(script: string) => Promise<unknown>>().mockResolvedValue(true)
+    await attachReferenceFiles({
+      executeJavaScript,
+      debugger: { isAttached: vi.fn(() => false), attach: vi.fn(), detach: vi.fn(), sendCommand },
+    }, ['C:\\Temp\\reference.png'])
+
+    expect(executeJavaScript.mock.calls.some(([script]) =>
+      script.includes("dispatchEvent(new Event('change', { bubbles: true }))"),
+    )).toBe(true)
+  })
+
   it('targets the file input associated with the current ChatGPT composer', async () => {
     const sendCommand = vi.fn()
       .mockResolvedValueOnce({ root: { nodeId: 1 } })
