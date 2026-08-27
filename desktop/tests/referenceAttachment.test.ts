@@ -4,10 +4,13 @@ import { attachReferenceFiles } from '../src/chatgpt/referenceAttachment.js'
 
 describe('ChatGPT reference attachment', () => {
   it('sets the local file on ChatGPT file input through Chromium', async () => {
-    const sendCommand = vi.fn()
-      .mockResolvedValueOnce({ root: { nodeId: 1 } })
-      .mockResolvedValueOnce({ nodeId: 9 })
-      .mockResolvedValueOnce({})
+    const sendCommand = vi.fn(async (method: string) => {
+      if (method === 'DOM.getDocument') return { root: { nodeId: 1 } }
+      if (method === 'DOM.querySelector') return { nodeId: 9 }
+      if (method === 'DOM.resolveNode') return { object: { objectId: 'file-input-9' } }
+      if (method === 'Runtime.callFunctionOn') return { result: { value: 2 } }
+      return {}
+    })
     const webContents = {
       executeJavaScript: vi.fn(async () => true),
       debugger: {
@@ -30,12 +33,14 @@ describe('ChatGPT reference attachment', () => {
   })
 
   it('opens the add menu and chooses its file item when the input is not mounted yet', async () => {
-    const sendCommand = vi.fn()
-      .mockResolvedValueOnce({ root: { nodeId: 1 } })
-      .mockResolvedValueOnce({ nodeId: 0 })
-      .mockResolvedValueOnce({ root: { nodeId: 1 } })
-      .mockResolvedValueOnce({ nodeId: 9 })
-      .mockResolvedValueOnce({})
+    let queryCount = 0
+    const sendCommand = vi.fn(async (method: string) => {
+      if (method === 'DOM.getDocument') return { root: { nodeId: 1 } }
+      if (method === 'DOM.querySelector') return { nodeId: queryCount++ === 0 ? 0 : 9 }
+      if (method === 'DOM.resolveNode') return { object: { objectId: 'file-input-9' } }
+      if (method === 'Runtime.callFunctionOn') return { result: { value: 1 } }
+      return {}
+    })
     const executeJavaScript = vi.fn(async (_script: string) => true)
     await attachReferenceFiles({
       executeJavaScript,
@@ -55,6 +60,8 @@ describe('ChatGPT reference attachment', () => {
       if (method === 'DOM.getDocument') return { root: { nodeId: 1 } }
       if (method === 'DOM.querySelector') return { nodeId: 9 }
       if (method === 'Network.enable') return {}
+      if (method === 'DOM.resolveNode') return { object: { objectId: 'file-input-9' } }
+      if (method === 'Runtime.callFunctionOn') return { result: { value: 1 } }
       if (method === 'DOM.setFileInputFiles') {
         queueMicrotask(() => messageListener?.({}, 'Network.requestWillBeSent', {
           requestId: 'upload-1',
@@ -76,6 +83,10 @@ describe('ChatGPT reference attachment', () => {
     }, ['C:\\Temp\\reference.png'])
 
     expect(sendCommand).toHaveBeenCalledWith('Network.enable')
+    expect(sendCommand).toHaveBeenCalledWith('DOM.resolveNode', { nodeId: 9 })
+    expect(sendCommand).toHaveBeenCalledWith('Runtime.callFunctionOn', expect.objectContaining({
+      objectId: 'file-input-9',
+    }))
     expect(on).toHaveBeenCalledWith('message', expect.any(Function))
     expect(removeListener).toHaveBeenCalledWith('message', expect.any(Function))
   })

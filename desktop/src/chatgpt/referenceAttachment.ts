@@ -67,6 +67,30 @@ function startUploadObservation(debuggerApi: DebuggerLike): Promise<void> | unde
   return completed
 }
 
+async function dispatchFileSelection(
+  debuggerApi: DebuggerLike,
+  nodeId: number,
+  expectedFileCount: number,
+): Promise<void> {
+  const resolved = await debuggerApi.sendCommand('DOM.resolveNode', { nodeId }) as {
+    object?: { objectId?: string }
+  }
+  const objectId = resolved.object?.objectId
+  if (!objectId) throw new Error('CHATGPT_FILE_INPUT_UNAVAILABLE')
+  const dispatched = await debuggerApi.sendCommand('Runtime.callFunctionOn', {
+    objectId,
+    functionDeclaration: `function() {
+      this.dispatchEvent(new Event('input', { bubbles: true }))
+      this.dispatchEvent(new Event('change', { bubbles: true }))
+      return this.files ? this.files.length : 0
+    }`,
+    returnByValue: true,
+  }) as { result?: { value?: unknown } }
+  if (dispatched.result?.value !== expectedFileCount) {
+    throw new Error('CHATGPT_FILE_SELECTION_NOT_APPLIED')
+  }
+}
+
 export async function attachReferenceFiles(
   webContents: AttachmentWebContents,
   filePaths: string[],
@@ -101,6 +125,7 @@ export async function attachReferenceFiles(
       nodeId,
       files: filePaths,
     })
+    await dispatchFileSelection(webContents.debugger, nodeId, filePaths.length)
     await uploadCompleted
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const ready = await webContents.executeJavaScript(`(() => {
