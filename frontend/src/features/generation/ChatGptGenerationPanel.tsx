@@ -7,7 +7,7 @@ import { getDesktopBridge } from '../desktop/desktopBridge'
 import { ImageMentionMenu } from './ImageMentionMenu'
 import { cancelGenerationTask, createGenerationTask } from './generationApi'
 import { ensureDesktopGenerationEvents, useGenerationStore } from './generationStore'
-import type { DesktopReferenceImage } from '../desktop/types'
+import type { DesktopGenerationEvent, DesktopReferenceImage } from '../desktop/types'
 import * as resourcesApi from '../../lib/resourcesApi'
 import {
   filterMentionCandidates,
@@ -20,6 +20,19 @@ import {
 
 interface ChatGptGenerationPanelProps {
   projectId: string | null
+}
+
+type TerminalTone = 'error' | 'neutral'
+
+function terminalPresentation(event: DesktopGenerationEvent): { title: string; detail: string; tone: TerminalTone } | null {
+  switch (event.state) {
+    case 'refused': return { title: '生成被 ChatGPT 拒绝', detail: event.message, tone: 'error' }
+    case 'failed': return { title: '生成失败', detail: event.message, tone: 'error' }
+    case 'rate_limited': return { title: '生成受限', detail: event.message, tone: 'error' }
+    case 'page_changed': return { title: '需要重新连接', detail: event.message, tone: 'error' }
+    case 'cancelled': return { title: '生成已取消', detail: event.message, tone: 'neutral' }
+    default: return null
+  }
 }
 
 export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProps) {
@@ -56,6 +69,7 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
     ? projects.find((project) => project.id === taskProjectId)?.name ?? taskProjectId
     : '快速创作（未归档图片）'
   const canvas = useCanvasStore((state) => taskProjectId ? state.canvases[taskProjectId] : undefined)
+  const terminalFeedback = generationEvent ? terminalPresentation(generationEvent) : null
 
   useEffect(() => {
     const requestId = ++scopeRequestRef.current
@@ -133,11 +147,7 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
     if (generationEvent.state === 'login_required' || generationEvent.state === 'page_changed') {
       setViewVisible(true)
     }
-    if (generationEvent.state === 'failed' || generationEvent.state === 'refused') {
-      setError(generationEvent.message)
-    } else {
-      setError(null)
-    }
+    setError(null)
   }, [generationEvent])
 
   const selectMention = (image: MentionImage) => {
@@ -345,8 +355,14 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
         </button>
       </form>
 
-      <div className="desktop-generation-status" role="status"><span />{message}</div>
-      {error && <div className="desktop-generation-error" role="alert">{error}</div>}
+      <div className={`desktop-generation-status${terminalFeedback ? ` desktop-generation-status--${terminalFeedback.tone}` : ''}`} role="status">
+        {!terminalFeedback && <span aria-hidden="true" />}
+        <strong>{terminalFeedback?.title ?? message}</strong>
+        {terminalFeedback?.tone === 'neutral' && <small>{terminalFeedback.detail}</small>}
+      </div>
+      {terminalFeedback?.tone === 'error'
+        ? <div className="desktop-generation-error" role="alert">{terminalFeedback.detail}</div>
+        : error && <div className="desktop-generation-error" role="alert">{error}</div>}
 
       <div className="desktop-generation-secondary-actions">
         <button type="button" disabled={!taskId || !pending} onClick={() => taskId && void bridge?.cancelGeneration(taskId)}>

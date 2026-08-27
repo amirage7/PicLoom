@@ -48,6 +48,38 @@ afterEach(() => {
 })
 
 describe('ChatGptGenerationPanel', () => {
+  it.each([
+    ['refused', '生成被 ChatGPT 拒绝', '抱歉，我无法根据这个请求生成图片。'],
+    ['failed', '生成失败', '下载图片失败'],
+    ['rate_limited', '生成受限', '当前额度不足'],
+  ] as const)('shows %s as error terminal feedback', async (state, title, message) => {
+    const bridge = installBridge()
+    render(<ChatGptGenerationPanel projectId="future-city" />)
+    await waitFor(() => expect(bridge.onGenerationEvent).toHaveBeenCalledOnce())
+    const listener = vi.mocked(bridge.onGenerationEvent).mock.calls[0][0]
+
+    act(() => listener({ taskId: 'task-1', state, message, imageIds: [], recoverable: false }))
+
+    expect(screen.getByRole('status')).toHaveTextContent(title)
+    expect(screen.getByRole('status')).not.toHaveTextContent('正在生成')
+    expect(screen.getByRole('alert')).toHaveTextContent(message)
+  })
+
+  it('shows cancellation as neutral terminal feedback without an in-progress dot', async () => {
+    const bridge = installBridge()
+    const { container } = render(<ChatGptGenerationPanel projectId="future-city" />)
+    await waitFor(() => expect(bridge.onGenerationEvent).toHaveBeenCalledOnce())
+    const listener = vi.mocked(bridge.onGenerationEvent).mock.calls[0][0]
+
+    act(() => listener({ taskId: 'task-1', state: 'cancelled', message: '任务已取消', imageIds: [], recoverable: false }))
+
+    expect(screen.getByRole('status')).toHaveTextContent('生成已取消')
+    expect(screen.getByRole('status')).toHaveTextContent('任务已取消')
+    expect(screen.getByRole('status')).not.toHaveTextContent('正在生成')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(container.querySelector('.desktop-generation-status span')).not.toBeInTheDocument()
+  })
+
   it('shows the native view, reports bounds, and hides it on unmount', async () => {
     const user = userEvent.setup()
     const bridge = installBridge()
@@ -314,7 +346,9 @@ describe('ChatGptGenerationPanel', () => {
     first.unmount()
     render(<ChatGptGenerationPanel projectId="future-city" />)
 
-    expect(screen.getByRole('status')).toHaveTextContent('页面变化，可重试收集')
+    expect(screen.getByRole('status')).toHaveTextContent('需要重新连接')
+    expect(screen.getByRole('status')).not.toHaveTextContent('正在生成')
+    expect(screen.getByRole('alert')).toHaveTextContent('页面变化，可重试收集')
     const retry = screen.getByRole('button', { name: '重试收集图片' })
     expect(retry).toBeEnabled()
     await user.click(retry)

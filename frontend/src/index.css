@@ -415,7 +415,11 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .desktop-generation-submit:hover:not(:disabled) { background: oklch(0.78 0.1 188); }
 .desktop-generation-submit:disabled { cursor: not-allowed; opacity: 0.46; }
 .desktop-generation-status { display: flex; align-items: flex-start; gap: 8px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.desktop-generation-status strong { font: inherit; font-weight: 600; }
+.desktop-generation-status small { color: var(--subtle); font: inherit; }
 .desktop-generation-status span { width: 6px; height: 6px; flex: 0 0 auto; margin-top: 4px; background: var(--primary); border-radius: 999px; }
+.desktop-generation-status--error { color: oklch(0.82 0.09 24); }
+.desktop-generation-status--neutral { color: var(--muted); }
 .desktop-generation-error { padding: 9px 10px; color: oklch(0.82 0.09 24); font-size: 10px; line-height: 1.5; background: oklch(0.2 0.025 24); border: 1px solid oklch(0.5 0.11 24); border-radius: 7px; }
 
 @media (max-width: 1100px) {
