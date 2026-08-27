@@ -2,6 +2,7 @@ import { Eraser, Eye, EyeOff, RefreshCw, RotateCcw, Send, Square } from 'lucide-
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 
 import { useCanvasStore } from '../canvas/store/canvasStore'
+import { useAppStore } from '../../app/store'
 import { getDesktopBridge } from '../desktop/desktopBridge'
 import { ImageMentionMenu } from './ImageMentionMenu'
 import { cancelGenerationTask, createGenerationTask } from './generationApi'
@@ -26,7 +27,7 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
   const viewSlotRef = useRef<HTMLDivElement>(null)
   const promptRef = useRef<HTMLTextAreaElement>(null)
   const startingRef = useRef(false)
-  const canvas = useCanvasStore((state) => projectId ? state.canvases[projectId] : undefined)
+  const scopeRequestRef = useRef(0)
   const prompt = useGenerationStore((state) => state.prompt)
   const setPrompt = useGenerationStore((state) => state.setPrompt)
   const transparentBackground = useGenerationStore((state) => state.transparentBackground)
@@ -35,10 +36,12 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
   const consumeQuickAction = useGenerationStore((state) => state.consumeQuickAction)
   const pending = useGenerationStore((state) => state.desktopBusy)
   const taskId = useGenerationStore((state) => state.desktopTaskId ?? state.desktopRecoverableTaskId)
+  const desktopTaskProjectId = useGenerationStore((state) => state.desktopTaskProjectId)
   const generationEvent = useGenerationStore((state) => state.desktopEvent)
   const acquireDesktopGeneration = useGenerationStore((state) => state.acquireDesktopGeneration)
   const bindDesktopTask = useGenerationStore((state) => state.bindDesktopTask)
   const releaseDesktopGeneration = useGenerationStore((state) => state.releaseDesktopGeneration)
+  const projects = useAppStore((state) => state.projects)
   const [caret, setCaret] = useState(0)
   const [mentionIndex, setMentionIndex] = useState(0)
   const [viewVisible, setViewVisible] = useState(false)
@@ -46,11 +49,28 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
   const [message, setMessage] = useState('登录后，可在这里直接使用普通 Chat 生成图片。')
   const [error, setError] = useState<string | null>(null)
   const [scopeImages, setScopeImages] = useState<MentionImage[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projectId)
+  const taskDestinationLocked = taskId !== null
+  const taskProjectId = taskDestinationLocked ? desktopTaskProjectId : selectedProjectId
+  const taskProjectName = taskProjectId
+    ? projects.find((project) => project.id === taskProjectId)?.name ?? taskProjectId
+    : '快速创作（未归档图片）'
+  const canvas = useCanvasStore((state) => taskProjectId ? state.canvases[taskProjectId] : undefined)
 
   useEffect(() => {
-    const request = projectId ? resourcesApi.listImages(projectId) : resourcesApi.listUnarchivedImages()
-    void request.then((values) => setScopeImages(values.map((image) => ({ imageId: image.id, name: image.name, imageUrl: image.image_url })))).catch(() => setScopeImages([]))
-  }, [projectId])
+    const requestId = ++scopeRequestRef.current
+    setScopeImages([])
+    const request = taskProjectId ? resourcesApi.listImages(taskProjectId) : resourcesApi.listUnarchivedImages()
+    void request.then((values) => {
+      if (scopeRequestRef.current !== requestId) return
+      setScopeImages(values.map((image) => ({ imageId: image.id, name: image.name, imageUrl: image.image_url })))
+    }).catch(() => {
+      if (scopeRequestRef.current === requestId) setScopeImages([])
+    })
+    return () => {
+      if (scopeRequestRef.current === requestId) scopeRequestRef.current += 1
+    }
+  }, [taskProjectId])
 
   const canvasImages: MentionImage[] = (canvas?.nodes ?? []).map((node) => ({
     imageId: node.id,
@@ -153,6 +173,7 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
     requestedPrompt: string,
     requestedReferences?: DesktopReferenceImage[],
     requestedTransparentBackground = transparentBackground,
+    requestedProjectId = taskProjectId,
   ) => {
     const compactPrompt = requestedPrompt.trim()
     if (!compactPrompt) return
@@ -179,13 +200,13 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
     let createdTaskId: string | null = null
     try {
       const parentImageId = references[0]?.imageId
-      const task = await createGenerationTask(projectId, compactPrompt, parentImageId)
+      const task = await createGenerationTask(requestedProjectId, compactPrompt, parentImageId)
       const nextTaskId = task.id
       createdTaskId = nextTaskId
-      bindDesktopTask(nextTaskId, projectId)
+      bindDesktopTask(nextTaskId, requestedProjectId)
       await bridge.startGeneration({
         taskId: nextTaskId,
-        projectId,
+        projectId: requestedProjectId,
         prompt: compactPrompt,
         parentImageId: parentImageId ?? null,
         referenceImages: references,
@@ -203,7 +224,7 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
     } finally {
       startingRef.current = false
     }
-  }, [acquireDesktopGeneration, bindDesktopTask, bridge, mentionImages, projectId, releaseDesktopGeneration, transparentBackground])
+  }, [acquireDesktopGeneration, bindDesktopTask, bridge, mentionImages, releaseDesktopGeneration, taskProjectId, transparentBackground])
 
   useEffect(() => {
     if (!projectId || !quickAction || quickAction.projectId !== projectId) return
@@ -214,7 +235,7 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    void startGeneration(prompt)
+    void startGeneration(prompt, undefined, transparentBackground, taskProjectId)
   }
 
   const hideView = () => {
@@ -260,6 +281,19 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
       )}
 
       <form className="desktop-generation-form" onSubmit={submit}>
+        <label className="desktop-generation-destination">
+          <span>保存到项目</span>
+          <select
+            aria-label="保存到项目"
+            value={taskProjectId ?? ''}
+            disabled={taskDestinationLocked}
+            onChange={(event) => setSelectedProjectId(event.target.value || null)}
+          >
+            <option value="">快速创作（未归档图片）</option>
+            {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+          </select>
+        </label>
+        {taskDestinationLocked && <p className="desktop-generation-destination-result">结果将保存到：{taskProjectName}</p>}
         <label htmlFor="desktop-generation-prompt">Prompt</label>
         <div className="desktop-prompt-editor">
           <textarea
