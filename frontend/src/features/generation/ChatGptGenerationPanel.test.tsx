@@ -166,6 +166,31 @@ describe('ChatGptGenerationPanel', () => {
     expect(screen.getByText('结果将保存到：角色创作')).toBeInTheDocument()
   })
 
+  it('follows the newly active workspace after a recoverable generation failure', async () => {
+    const user = userEvent.setup()
+    const bridge = installBridge()
+    useAppStore.setState({
+      projects: [
+        { id: 'a', name: '角色创作', createdTime: '', imageCount: 0 },
+        { id: 'b', name: '项目 logo', createdTime: '', imageCount: 0 },
+      ],
+    })
+    const { rerender } = render(<ChatGptGenerationPanel projectId="a" />)
+
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), '一朵花')
+    await user.click(screen.getByRole('button', { name: '使用 ChatGPT 生成' }))
+    await waitFor(() => expect(bridge.startGeneration).toHaveBeenCalledOnce())
+    const listener = vi.mocked(bridge.onGenerationEvent).mock.calls[0][0]
+    act(() => listener({
+      taskId: 'task-1', state: 'failed', message: '参考图上传失败', imageIds: [], recoverable: true,
+    }))
+
+    rerender(<ChatGptGenerationPanel projectId="b" />)
+
+    expect(screen.getByRole('combobox', { name: '保存到项目' })).toBeEnabled()
+    expect(screen.getByRole('combobox', { name: '保存到项目' })).toHaveValue('b')
+  })
+
   it('uses the newly active workspace after an idle panel rerender', async () => {
     const user = userEvent.setup()
     const bridge = installBridge()

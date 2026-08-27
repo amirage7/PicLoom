@@ -63,7 +63,7 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
   const [error, setError] = useState<string | null>(null)
   const [scopeImages, setScopeImages] = useState<MentionImage[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projectId)
-  const taskDestinationLocked = taskId !== null
+  const taskDestinationLocked = pending && taskId !== null
   const taskProjectId = taskDestinationLocked ? desktopTaskProjectId : selectedProjectId
   const taskProjectName = taskProjectId
     ? projects.find((project) => project.id === taskProjectId)?.name ?? taskProjectId
