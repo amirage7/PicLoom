@@ -1,8 +1,30 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { attachReferenceFiles } from '../src/chatgpt/referenceAttachment.js'
+import {
+  attachReferenceFiles,
+  hasVisibleAttachmentSignal,
+  waitForReferenceAttachment,
+} from '../src/chatgpt/referenceAttachment.js'
 
 describe('ChatGPT reference attachment', () => {
+  it('waits for ChatGPT to render an attachment before submitting a referenced prompt', async () => {
+    const probe = vi.fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true)
+    const wait = vi.fn(async () => undefined)
+
+    await waitForReferenceAttachment(probe, wait)
+
+    expect(probe).toHaveBeenCalledTimes(2)
+    expect(wait).toHaveBeenCalledOnce()
+  })
+
+  it('does not mistake ChatGPT’s always-visible upload button for an attached reference', () => {
+    expect(hasVisibleAttachmentSignal(['Attach files'], 0)).toBe(false)
+    expect(hasVisibleAttachmentSignal(['Remove attachment'], 0)).toBe(true)
+    expect(hasVisibleAttachmentSignal([], 1)).toBe(true)
+  })
+
   it('sets the local file on ChatGPT file input through Chromium', async () => {
     const sendCommand = vi.fn()
       .mockResolvedValueOnce({ root: { nodeId: 1 } })

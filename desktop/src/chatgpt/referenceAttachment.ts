@@ -10,6 +10,25 @@ interface AttachmentWebContents {
   debugger: DebuggerLike
 }
 
+const ATTACHMENT_READY_ATTEMPTS = 40
+const ATTACHMENT_READY_INTERVAL_MS = 150
+
+export async function waitForReferenceAttachment(
+  probe: () => Promise<boolean>,
+  wait: (milliseconds: number) => Promise<void> = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+): Promise<void> {
+  for (let attempt = 0; attempt < ATTACHMENT_READY_ATTEMPTS; attempt += 1) {
+    if (await probe()) return
+    await wait(ATTACHMENT_READY_INTERVAL_MS)
+  }
+  throw new Error('CHATGPT_REFERENCE_UPLOAD_TIMEOUT')
+}
+
+export function hasVisibleAttachmentSignal(labels: string[], previewCount: number): boolean {
+  if (previewCount > 0) return true
+  return labels.some((label) => ['remove', 'delete', '移除', '删除'].some((term) => label.toLowerCase().includes(term)))
+}
+
 async function locateFileInput(debuggerApi: DebuggerLike): Promise<number> {
   const documentResult = await debuggerApi.sendCommand('DOM.getDocument') as { root?: { nodeId?: number } }
   const rootId = documentResult.root?.nodeId
@@ -53,15 +72,26 @@ export async function attachReferenceFiles(
       nodeId,
       files: filePaths,
     })
-    for (let attempt = 0; attempt < 20; attempt += 1) {
+    await waitForReferenceAttachment(async () => {
       const ready = await webContents.executeJavaScript(`(() => {
+        const hasVisibleAttachmentSignal = ${hasVisibleAttachmentSignal.toString()}
         const input = document.querySelector('input[type="file"]')
-        return Boolean(input && input.files && input.files.length >= ${filePaths.length})
+        if (!input?.files || input.files.length < ${filePaths.length}) return false
+        const composer = input.closest('form') || input.parentElement?.parentElement || document
+        const controls = Array.from(composer.querySelectorAll('button, [role="button"], [data-testid]'))
+        const labels = controls.map((element) => [
+            element.getAttribute('aria-label'),
+            element.getAttribute('data-testid'),
+            element.getAttribute('title'),
+            element.textContent,
+          ].filter(Boolean).join(' '))
+        return hasVisibleAttachmentSignal(
+          labels,
+          composer.querySelectorAll('img, [data-testid*="attachment"][data-testid*="preview"]').length,
+        )
       })()`)
-      if (ready === true) return
-      await new Promise((resolve) => setTimeout(resolve, 150))
-    }
-    throw new Error('CHATGPT_REFERENCE_UPLOAD_TIMEOUT')
+      return ready === true
+    })
   } finally {
     if (attachedHere) webContents.debugger.detach()
   }
