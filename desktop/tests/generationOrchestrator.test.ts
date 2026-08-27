@@ -146,6 +146,18 @@ describe('desktop generation orchestrator', () => {
       .toBe('正在收集最后生成的图片。')
   })
 
+  it('preserves a null project ID when importing a quick-created image', async () => {
+    const test = harness([{ kind: 'ready' }, {
+      kind: 'completed', images: [{ src: 'blob:quick-create', alt: '' }],
+    }])
+
+    await test.orchestrator.start({ ...REQUEST, projectId: null })
+
+    expect(test.completeBatch).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: null,
+    }))
+  })
+
   it('asks ChatGPT once for a single name when the image reply has no name', async () => {
     const test = harness([{ kind: 'ready' }, {
       kind: 'completed', images: [{ src: 'blob:first', alt: '' }],
