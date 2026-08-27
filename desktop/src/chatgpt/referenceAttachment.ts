@@ -3,7 +3,15 @@ interface DebuggerLike {
   attach(version?: string): void
   detach(): void
   sendCommand(method: string, params?: Record<string, unknown>): Promise<unknown>
+  on?(event: 'message', listener: DebuggerMessageListener): void
+  removeListener?(event: 'message', listener: DebuggerMessageListener): void
 }
+
+type DebuggerMessageListener = (
+  event: unknown,
+  method: string,
+  params: Record<string, unknown>,
+) => void
 
 interface AttachmentWebContents {
   executeJavaScript(script: string): Promise<unknown>
@@ -19,6 +27,44 @@ async function locateFileInput(debuggerApi: DebuggerLike): Promise<number> {
     selector: 'input[type="file"]',
   }) as { nodeId?: number }
   return query.nodeId ?? 0
+}
+
+function isChatGptFileUploadRequest(params: Record<string, unknown>): boolean {
+  const request = params.request as { method?: unknown; url?: unknown } | undefined
+  return request?.method === 'POST'
+    && typeof request.url === 'string'
+    && /\/(?:files?|uploads?|attachments?)(?:[/?]|$)/i.test(request.url)
+}
+
+function startUploadObservation(debuggerApi: DebuggerLike): Promise<void> | undefined {
+  if (!debuggerApi.on || !debuggerApi.removeListener) return undefined
+
+  const uploadRequestIds = new Set<string>()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let listener: DebuggerMessageListener
+  const completed = new Promise<void>((resolve, reject) => {
+    const finish = (error?: Error) => {
+      if (timer) clearTimeout(timer)
+      debuggerApi.removeListener?.('message', listener)
+      if (error) reject(error)
+      else resolve()
+    }
+    listener = (_event, method, params) => {
+      if (method === 'Network.requestWillBeSent' && isChatGptFileUploadRequest(params)) {
+        const requestId = params.requestId
+        if (typeof requestId === 'string') uploadRequestIds.add(requestId)
+        return
+      }
+      if (method === 'Network.responseReceived' && uploadRequestIds.has(String(params.requestId))) {
+        const status = (params.response as { status?: unknown } | undefined)?.status
+        if (typeof status === 'number' && status >= 200 && status < 300) finish()
+        else finish(new Error('CHATGPT_REFERENCE_UPLOAD_REJECTED'))
+      }
+    }
+    timer = setTimeout(() => finish(new Error('CHATGPT_REFERENCE_UPLOAD_NOT_CONFIRMED')), 12_000)
+  })
+  debuggerApi.on('message', listener!)
+  return completed
 }
 
 export async function attachReferenceFiles(
@@ -49,10 +95,13 @@ export async function attachReferenceFiles(
       nodeId = await locateFileInput(webContents.debugger)
     }
     if (!nodeId) throw new Error('CHATGPT_FILE_INPUT_NOT_FOUND')
+    const uploadCompleted = startUploadObservation(webContents.debugger)
+    if (uploadCompleted) await webContents.debugger.sendCommand('Network.enable')
     await webContents.debugger.sendCommand('DOM.setFileInputFiles', {
       nodeId,
       files: filePaths,
     })
+    await uploadCompleted
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const ready = await webContents.executeJavaScript(`(() => {
         const input = document.querySelector('input[type="file"]')
