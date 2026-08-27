@@ -38,6 +38,7 @@ export interface GenerationState {
   quickAction: QuickGenerationAction | null
   desktopBusy: boolean
   desktopTaskId: string | null
+  desktopTaskProjectId: string | null
   desktopRecoverableTaskId: string | null
   desktopEvent: DesktopGenerationEvent | null
   setPrompt(value: string): void
@@ -46,7 +47,7 @@ export interface GenerationState {
   enqueueQuickAction(action: QuickGenerationActionInput): void
   consumeQuickAction(projectId: string): QuickGenerationAction | null
   acquireDesktopGeneration(): boolean
-  bindDesktopTask(taskId: string): void
+  bindDesktopTask(taskId: string, projectId: string | null): void
   releaseDesktopGeneration(taskId?: string): void
   handleDesktopGenerationEvent(event: DesktopGenerationEvent): void
   refreshAvailability(): Promise<void>
@@ -56,7 +57,7 @@ export interface GenerationState {
 
 const initializer = (provider: ImageProvider): StateCreator<GenerationState> => (set, get) => ({
   prompt: '', transparentBackground: false, availability: null, task: null, error: null, isPanelOpen: false, imageIds: [], recoverable: false, providerMode: provider.id, quickAction: null,
-  desktopBusy: false, desktopTaskId: null, desktopRecoverableTaskId: null, desktopEvent: null,
+  desktopBusy: false, desktopTaskId: null, desktopTaskProjectId: null, desktopRecoverableTaskId: null, desktopEvent: null,
   setPrompt: (prompt) => set({ prompt }),
   setTransparentBackground: (transparentBackground) => set({ transparentBackground }),
   setPanelOpen: (isPanelOpen) => set({ isPanelOpen }),
@@ -77,16 +78,22 @@ const initializer = (provider: ImageProvider): StateCreator<GenerationState> => 
     set({
       desktopBusy: true,
       desktopTaskId: null,
+      desktopTaskProjectId: null,
       desktopRecoverableTaskId: null,
       desktopEvent: null,
     })
     return true
   },
-  bindDesktopTask: (desktopTaskId) => set({ desktopBusy: true, desktopTaskId, desktopRecoverableTaskId: null }),
+  bindDesktopTask: (desktopTaskId, desktopTaskProjectId) => set({
+    desktopBusy: true,
+    desktopTaskId,
+    desktopTaskProjectId,
+    desktopRecoverableTaskId: null,
+  }),
   releaseDesktopGeneration: (taskId) => {
     const activeTaskId = get().desktopTaskId ?? get().desktopRecoverableTaskId
     if (taskId && activeTaskId && taskId !== activeTaskId) return
-    set({ desktopBusy: false, desktopTaskId: null, desktopRecoverableTaskId: null })
+    set({ desktopBusy: false, desktopTaskId: null, desktopTaskProjectId: null, desktopRecoverableTaskId: null })
   },
   handleDesktopGenerationEvent: (desktopEvent) => {
     const state = get()

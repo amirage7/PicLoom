@@ -182,7 +182,7 @@ export function ChatGptGenerationPanel({ projectId }: ChatGptGenerationPanelProp
       const task = await createGenerationTask(projectId, compactPrompt, parentImageId)
       const nextTaskId = task.id
       createdTaskId = nextTaskId
-      bindDesktopTask(nextTaskId)
+      bindDesktopTask(nextTaskId, projectId)
       await bridge.startGeneration({
         taskId: nextTaskId,
         projectId,
