@@ -239,6 +239,19 @@ describe('desktop generation orchestrator', () => {
     expect(test.events.at(-1)?.state).toBe(expected)
   })
 
+  it('emits the specific refusal reason', async () => {
+    const test = harness([{ kind: 'ready' }, {
+      kind: 'refused', reason: '抱歉，我无法根据这个请求生成图片。',
+    }])
+
+    await test.orchestrator.start(REQUEST)
+
+    expect(test.events.at(-1)).toMatchObject({
+      state: 'refused',
+      message: '抱歉，我无法根据这个请求生成图片。',
+    })
+  })
+
   it('rejects a simultaneous task', async () => {
     let release!: () => void
     const waiting = new Promise<void>((resolve) => { release = resolve })

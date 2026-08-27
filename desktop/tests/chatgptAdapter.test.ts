@@ -137,11 +137,46 @@ describe('versioned ChatGPT page adapter', () => {
     })
   })
 
-  it('distinguishes refusal, rate limit, and unknown layouts', () => {
-    expect(inspectFixtureHtml(fixture('refusal.html'), [])).toEqual({
+  it('returns visible assistant refusal text for a new rejected response', () => {
+    expect(inspectFixtureHtml(fixture('refusal.html'), ['old-response'])).toEqual({
       kind: 'refused',
-      reason: 'The request was refused',
+      reason: '抱歉，我无法根据这个请求生成图片。',
     })
+  })
+
+  it('compacts whitespace in a visible refusal reason', () => {
+    const html = `
+      <article data-message-author-role="assistant" data-message-id="new-response" data-aic-refusal="true">
+        抱歉，\n\n我无法   根据这个请求\t生成图片。
+      </article>
+    `
+
+    expect(inspectFixtureHtml(html, [])).toEqual({
+      kind: 'refused',
+      reason: '抱歉， 我无法 根据这个请求 生成图片。',
+    })
+  })
+
+  it('caps a visible refusal reason at 240 characters', () => {
+    const reason = 'x'.repeat(241)
+    const html = `<article data-message-author-role="assistant" data-message-id="new-response" data-aic-refusal="true">${reason}</article>`
+
+    expect(inspectFixtureHtml(html, [])).toEqual({
+      kind: 'refused',
+      reason: 'x'.repeat(240),
+    })
+  })
+
+  it('uses the exact fallback when a refusal has no visible text', () => {
+    const html = '<article data-message-author-role="assistant" data-message-id="new-response" data-aic-refusal="true"></article>'
+
+    expect(inspectFixtureHtml(html, [])).toEqual({
+      kind: 'refused',
+      reason: 'ChatGPT 未生成图片，可能因内容限制或请求未完成。',
+    })
+  })
+
+  it('distinguishes rate limit and unknown layouts', () => {
     expect(inspectFixtureHtml(fixture('rate-limit.html'), [])).toEqual({
       kind: 'rate_limited',
       reason: 'ChatGPT usage limit reached',
