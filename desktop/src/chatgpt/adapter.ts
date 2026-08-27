@@ -37,6 +37,11 @@ function fixtureText(html: string): string {
     .replace(/&amp;/gi, '&')
 }
 
+function refusalReason(text: string): string {
+  const compact = text.replace(/\s+/g, ' ').trim()
+  return compact.slice(0, 240) || 'ChatGPT 未生成图片，可能因内容限制或请求未完成。'
+}
+
 // 允许名字跨越 innerText 的软换行延续；段落空行（\n\n）或 Markdown 标记行视作段间边界。
 // 提取后压扁所有空白，再裁到 80 字符上限。
 const SUGGESTED_NAME_PATTERN = /图片名称\s*[：:]\s*([\s\S]+?)(?=\n\s*\n|\n\s*[#>*\-]|\n---|\n\*\*\*|$)/i
@@ -103,8 +108,14 @@ export function inspectFixtureHtml(
     const identifier = attribute(article.attributes, 'data-message-id') || `assistant-index-${index}`
     return !baseline.has(identifier)
   }).at(-1)
-  if (latestArticle && /data-aic-refusal=["']true["']/i.test(latestArticle.attributes)) {
-    return { kind: 'refused', reason: 'The request was refused' }
+  if (latestArticle) {
+    const text = fixtureText(latestArticle.body)
+    if (
+      /data-aic-refusal=["']true["']/i.test(latestArticle.attributes)
+      || /cannot help with that request|can't assist with that request/i.test(text)
+    ) {
+      return { kind: 'refused', reason: refusalReason(text) }
+    }
   }
 
   const suggestedName = latestArticle
@@ -138,6 +149,10 @@ function runtimeInspectPage(
   assistantResponseIdsBefore: string[],
   imageSourcesBefore: string[],
 ): PageState {
+  const refusalReason = (text: string): string => {
+    const compact = text.replace(/\s+/g, ' ').trim()
+    return compact.slice(0, 240) || 'ChatGPT 未生成图片，可能因内容限制或请求未完成。'
+  }
   const suggestedNameFromText = (text: string): string | undefined => {
     const match = /图片名称\s*[：:]\s*([\s\S]+?)(?=\n\s*\n|\n\s*[#>*\-]|\n---|\n\*\*\*|$)/i.exec(text)
     const raw = match?.[1]
@@ -179,7 +194,7 @@ function runtimeInspectPage(
       latestResponse.dataset.aicRefusal === 'true'
       || /cannot help with that request|can't assist with that request/i.test(text)
     ) {
-      return { kind: 'refused', reason: 'The request was refused' }
+      return { kind: 'refused', reason: refusalReason(text) }
     }
   }
 

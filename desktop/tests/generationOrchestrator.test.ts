@@ -146,6 +146,18 @@ describe('desktop generation orchestrator', () => {
       .toBe('正在收集最后生成的图片。')
   })
 
+  it('preserves a null project ID when importing a quick-created image', async () => {
+    const test = harness([{ kind: 'ready' }, {
+      kind: 'completed', images: [{ src: 'blob:quick-create', alt: '' }],
+    }])
+
+    await test.orchestrator.start({ ...REQUEST, projectId: null })
+
+    expect(test.completeBatch).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: null,
+    }))
+  })
+
   it('asks ChatGPT once for a single name when the image reply has no name', async () => {
     const test = harness([{ kind: 'ready' }, {
       kind: 'completed', images: [{ src: 'blob:first', alt: '' }],
@@ -237,6 +249,19 @@ describe('desktop generation orchestrator', () => {
     const test = harness([{ kind: 'ready' }, pageState])
     await test.orchestrator.start(REQUEST)
     expect(test.events.at(-1)?.state).toBe(expected)
+  })
+
+  it('emits the specific refusal reason', async () => {
+    const test = harness([{ kind: 'ready' }, {
+      kind: 'refused', reason: '抱歉，我无法根据这个请求生成图片。',
+    }])
+
+    await test.orchestrator.start(REQUEST)
+
+    expect(test.events.at(-1)).toMatchObject({
+      state: 'refused',
+      message: '抱歉，我无法根据这个请求生成图片。',
+    })
   })
 
   it('rejects a simultaneous task', async () => {

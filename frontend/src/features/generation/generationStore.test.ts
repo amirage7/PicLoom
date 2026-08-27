@@ -69,11 +69,27 @@ it('guards desktop generation ownership atomically until the matching task relea
 
   expect(store.getState().acquireDesktopGeneration()).toBe(true)
   expect(store.getState().acquireDesktopGeneration()).toBe(false)
-  store.getState().bindDesktopTask('task-1')
+  store.getState().bindDesktopTask('task-1', null)
   store.getState().releaseDesktopGeneration('another-task')
   expect(store.getState().desktopBusy).toBe(true)
   store.getState().releaseDesktopGeneration('task-1')
   expect(store.getState().desktopBusy).toBe(false)
+})
+
+it('keeps the desktop task destination after the task completes', () => {
+  const provider = {
+    id: 'chatgpt-web',
+    getAvailability: vi.fn(), generate: vi.fn(), getTask: vi.fn(), cancel: vi.fn(),
+  } satisfies ImageProvider
+  const store = createGenerationStore(provider)
+
+  expect(store.getState().acquireDesktopGeneration()).toBe(true)
+  store.getState().bindDesktopTask('task-1', 'project-a')
+  store.getState().handleDesktopGenerationEvent({
+    taskId: 'task-1', state: 'completed', message: '任务完成', imageIds: [], recoverable: false,
+  })
+
+  expect(store.getState().desktopTaskProjectId).toBe('project-a')
 })
 
 it('ignores stale task events while a different desktop task owns the lock', () => {
@@ -89,7 +105,7 @@ it('ignores stale task events while a different desktop task owns the lock', () 
   })
   expect(store.getState().desktopBusy).toBe(true)
   expect(store.getState().desktopEvent).toBeNull()
-  store.getState().bindDesktopTask('task-current')
+  store.getState().bindDesktopTask('task-current', null)
   store.getState().handleDesktopGenerationEvent({
     taskId: 'task-old', state: 'page_changed', message: '旧任务页面变化', imageIds: [], recoverable: true,
   })

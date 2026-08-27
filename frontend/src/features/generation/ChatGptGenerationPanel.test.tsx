@@ -9,6 +9,8 @@ import { useCanvasStore } from '../canvas/store/canvasStore'
 import { ChatGptGenerationPanel } from './ChatGptGenerationPanel'
 import { useGenerationStore } from './generationStore'
 import * as api from './generationApi'
+import * as resourcesApi from '../../lib/resourcesApi'
+import type { ImageDto } from '../../lib/resourcesApi'
 
 vi.mock('./generationApi')
 
@@ -46,6 +48,38 @@ afterEach(() => {
 })
 
 describe('ChatGptGenerationPanel', () => {
+  it.each([
+    ['refused', '生成被 ChatGPT 拒绝', '抱歉，我无法根据这个请求生成图片。'],
+    ['failed', '生成失败', '下载图片失败'],
+    ['rate_limited', '生成受限', '当前额度不足'],
+  ] as const)('shows %s as error terminal feedback', async (state, title, message) => {
+    const bridge = installBridge()
+    render(<ChatGptGenerationPanel projectId="future-city" />)
+    await waitFor(() => expect(bridge.onGenerationEvent).toHaveBeenCalledOnce())
+    const listener = vi.mocked(bridge.onGenerationEvent).mock.calls[0][0]
+
+    act(() => listener({ taskId: 'task-1', state, message, imageIds: [], recoverable: false }))
+
+    expect(screen.getByRole('status')).toHaveTextContent(title)
+    expect(screen.getByRole('status')).not.toHaveTextContent('正在生成')
+    expect(screen.getByRole('alert')).toHaveTextContent(message)
+  })
+
+  it('shows cancellation as neutral terminal feedback without an in-progress dot', async () => {
+    const bridge = installBridge()
+    const { container } = render(<ChatGptGenerationPanel projectId="future-city" />)
+    await waitFor(() => expect(bridge.onGenerationEvent).toHaveBeenCalledOnce())
+    const listener = vi.mocked(bridge.onGenerationEvent).mock.calls[0][0]
+
+    act(() => listener({ taskId: 'task-1', state: 'cancelled', message: '任务已取消', imageIds: [], recoverable: false }))
+
+    expect(screen.getByRole('status')).toHaveTextContent('生成已取消')
+    expect(screen.getByRole('status')).toHaveTextContent('任务已取消')
+    expect(screen.getByRole('status')).not.toHaveTextContent('正在生成')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(container.querySelector('.desktop-generation-status span')).not.toBeInTheDocument()
+  })
+
   it('shows the native view, reports bounds, and hides it on unmount', async () => {
     const user = userEvent.setup()
     const bridge = installBridge()
@@ -77,6 +111,113 @@ describe('ChatGptGenerationPanel', () => {
       projectId: 'project-1', prompt: '一朵花', parentImageId: null,
       transparentBackground: true,
     })))
+  })
+
+  it('submits the selected destination rather than the active workspace', async () => {
+    const user = userEvent.setup()
+    const bridge = installBridge()
+    useAppStore.setState({
+      projects: [
+        { id: 'a', name: '角色创作', createdTime: '', imageCount: 0 },
+        { id: 'b', name: '项目 logo', createdTime: '', imageCount: 0 },
+      ],
+      activeProjectId: 'a', workspaceMode: 'project',
+    })
+    render(<ChatGptGenerationPanel projectId="a" />)
+
+    await user.selectOptions(screen.getByRole('combobox', { name: '保存到项目' }), 'b')
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), '一朵花')
+    await user.click(screen.getByRole('button', { name: '使用 ChatGPT 生成' }))
+
+    await waitFor(() => expect(api.createGenerationTask).toHaveBeenCalledWith('b', '一朵花', undefined))
+    expect(bridge.startGeneration).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'b' }))
+  })
+
+  it('submits quick creation without assigning a project', async () => {
+    const user = userEvent.setup()
+    const bridge = installBridge()
+    render(<ChatGptGenerationPanel projectId="future-city" />)
+
+    await user.selectOptions(screen.getByRole('combobox', { name: '保存到项目' }), '')
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), '一朵花')
+    await user.click(screen.getByRole('button', { name: '使用 ChatGPT 生成' }))
+
+    await waitFor(() => expect(api.createGenerationTask).toHaveBeenCalledWith(null, '一朵花', undefined))
+    expect(bridge.startGeneration).toHaveBeenCalledWith(expect.objectContaining({ projectId: null }))
+  })
+
+  it('keeps the task destination locked when the panel workspace changes', async () => {
+    const user = userEvent.setup()
+    installBridge()
+    useAppStore.setState({
+      projects: [
+        { id: 'a', name: '角色创作', createdTime: '', imageCount: 0 },
+        { id: 'b', name: '项目 logo', createdTime: '', imageCount: 0 },
+      ],
+    })
+    const { rerender } = render(<ChatGptGenerationPanel projectId="a" />)
+
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), '一朵花')
+    await user.click(screen.getByRole('button', { name: '使用 ChatGPT 生成' }))
+    await waitFor(() => expect(api.createGenerationTask).toHaveBeenCalledWith('a', '一朵花', undefined))
+    rerender(<ChatGptGenerationPanel projectId="b" />)
+
+    expect(screen.getByRole('combobox', { name: '保存到项目' })).toBeDisabled()
+    expect(screen.getByText('结果将保存到：角色创作')).toBeInTheDocument()
+  })
+
+  it('uses the newly active workspace after an idle panel rerender', async () => {
+    const user = userEvent.setup()
+    const bridge = installBridge()
+    useAppStore.setState({
+      projects: [
+        { id: 'a', name: '角色创作', createdTime: '', imageCount: 0 },
+        { id: 'b', name: '项目 logo', createdTime: '', imageCount: 0 },
+      ],
+      activeProjectId: 'a', workspaceMode: 'project',
+    })
+    const { rerender } = render(<ChatGptGenerationPanel projectId="a" />)
+
+    rerender(<ChatGptGenerationPanel projectId="b" />)
+    expect(screen.getByRole('combobox', { name: '保存到项目' })).toHaveValue('b')
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), '一朵花')
+    await user.click(screen.getByRole('button', { name: '使用 ChatGPT 生成' }))
+
+    await waitFor(() => expect(api.createGenerationTask).toHaveBeenCalledWith('b', '一朵花', undefined))
+    expect(bridge.startGeneration).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'b' }))
+  })
+
+  it('ignores stale image scopes after changing the destination', async () => {
+    const user = userEvent.setup()
+    installBridge()
+    let resolveA!: (images: ImageDto[]) => void
+    let resolveB!: (images: ImageDto[]) => void
+    vi.spyOn(resourcesApi, 'listImages').mockImplementation((id) => new Promise((resolve) => {
+      if (id === 'a') resolveA = resolve
+      if (id === 'b') resolveB = resolve
+    }))
+    useAppStore.setState({
+      projects: [
+        { id: 'a', name: '角色创作', createdTime: '', imageCount: 0 },
+        { id: 'b', name: '项目 logo', createdTime: '', imageCount: 0 },
+      ],
+    })
+    render(<ChatGptGenerationPanel projectId="a" />)
+    await waitFor(() => expect(resourcesApi.listImages).toHaveBeenCalledWith('a'))
+
+    await user.selectOptions(screen.getByRole('combobox', { name: '保存到项目' }), 'b')
+    await waitFor(() => expect(resourcesApi.listImages).toHaveBeenCalledWith('b'))
+    act(() => resolveB([{
+      id: 'image-b', project_id: 'b', image_path: '', image_url: 'b.png', file_name: 'b.png', name: '目标图片', prompt: '', tags: [], parent_id: null, source_ids: [], position_x: 0, position_y: 0, created_time: '',
+    }]))
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), '@')
+    expect(await screen.findByRole('option', { name: /目标图片/ })).toBeInTheDocument()
+
+    act(() => resolveA([{
+      id: 'image-a', project_id: 'a', image_path: '', image_url: 'a.png', file_name: 'a.png', name: '旧目标图片', prompt: '', tags: [], parent_id: null, source_ids: [], position_x: 0, position_y: 0, created_time: '',
+    }]))
+    await waitFor(() => expect(screen.getByRole('option', { name: /目标图片/ })).toBeInTheDocument())
+    expect(screen.queryByRole('option', { name: /旧目标图片/ })).not.toBeInTheDocument()
   })
 
   it('reloads the persistent ChatGPT page on request', async () => {
@@ -226,7 +367,9 @@ describe('ChatGptGenerationPanel', () => {
     first.unmount()
     render(<ChatGptGenerationPanel projectId="future-city" />)
 
-    expect(screen.getByRole('status')).toHaveTextContent('页面变化，可重试收集')
+    expect(screen.getByRole('status')).toHaveTextContent('需要重新连接')
+    expect(screen.getByRole('status')).not.toHaveTextContent('正在生成')
+    expect(screen.getByRole('alert')).toHaveTextContent('页面变化，可重试收集')
     const retry = screen.getByRole('button', { name: '重试收集图片' })
     expect(retry).toBeEnabled()
     await user.click(retry)
