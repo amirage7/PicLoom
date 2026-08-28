@@ -87,6 +87,12 @@ function newLargeImages(html: string, imageSourcesBefore: string[]): Array<{ src
   return images
 }
 
+function withoutUserMessages(html: string): string {
+  return html.replace(/<article\b([^>]*)>[\s\S]*?<\/article>/gi, (article, attributes: string) => (
+    attribute(attributes, 'data-message-author-role') === 'user' ? '' : article
+  ))
+}
+
 export function inspectFixtureHtml(
   html: string,
   assistantResponseIdsBefore: string[],
@@ -131,7 +137,7 @@ export function inspectFixtureHtml(
   if (unmarkedImages.length > 0) {
     return { kind: 'completed', images: unmarkedImages, ...(suggestedName ? { suggestedName } : {}) }
   }
-  const pageImages = newLargeImages(html, imageSourcesBefore)
+  const pageImages = newLargeImages(withoutUserMessages(html), imageSourcesBefore)
   if (pageImages.length > 0) {
     return { kind: 'completed', images: pageImages, ...(suggestedName ? { suggestedName } : {}) }
   }
@@ -225,6 +231,7 @@ function runtimeInspectPage(
   }
 
   const pageImages = Array.from(document.querySelectorAll<HTMLImageElement>('img'))
+    .filter((image) => !image.closest('[data-message-author-role="user"]'))
     .map((image) => ({
       src: image.currentSrc || image.src,
       alt: image.alt || '',

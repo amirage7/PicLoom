@@ -144,6 +144,27 @@ describe('versioned ChatGPT page adapter', () => {
     })
   })
 
+  it('does not import a newly uploaded user reference when the result is rendered outside the Assistant message', () => {
+    const html = `
+      <article data-message-author-role="user" data-message-id="user-new">
+        <img src="blob:https://chatgpt.com/reference-upload" width="1024" height="1024" alt="Reference">
+      </article>
+      <article data-message-author-role="assistant" data-message-id="assistant-new">
+        <p>图片名称：标题栏</p>
+      </article>
+      <section data-testid="image-generation-result">
+        <img src="https://files.oaiusercontent.com/title-banner.webp" width="1024" height="512" alt="">
+      </section>
+      <div id="prompt-textarea"></div>
+    `
+
+    expect(inspectFixtureHtml(html, [], [])).toEqual({
+      kind: 'completed',
+      images: [{ src: 'https://files.oaiusercontent.com/title-banner.webp', alt: '' }],
+      suggestedName: '标题栏',
+    })
+  })
+
   it('compacts whitespace in a visible refusal reason', () => {
     const html = `
       <article data-message-author-role="assistant" data-message-id="new-response" data-aic-refusal="true">
